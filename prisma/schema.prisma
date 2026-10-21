@@ -1,0 +1,158 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Multi-Tournament Engine Schema
+// Mirrors the architectural spec: tournaments, divisions,
+// game_types, tournament_events, centers, event_results,
+// audit_logs.
+// ─────────────────────────────────────────────────────────────
+
+model Tournament {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  organizer    String   @default("")
+  status       String   @default("active") // draft | active | completed | archived
+  pointsFirst  Int      @default(75)
+  pointsSecond Int      @default(50)
+  pointsThird  Int      @default(25)
+  templateId   String? // preset identifier e.g. math_comp_2026
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  divisions Division[]
+  games     GameType[]
+  centers   Center[]
+  events    TournamentEvent[]
+  results   EventResult[]
+}
+
+model Division {
+  id               String  @id @default(cuid())
+  tournamentId     String
+  code             String
+  name             String
+  ageRange         String  @default("")
+  gradeRange       String  @default("")
+  participantQuota Int     @default(5)
+  displayOrder     Int     @default(1)
+
+  tournament Tournament        @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  events     TournamentEvent[]
+
+  @@unique([tournamentId, code])
+  @@index([tournamentId])
+}
+
+model GameType {
+  id           String @id @default(cuid())
+  tournamentId String
+  code         String
+  englishName  String
+  sinhalaName  String @default("")
+  rulesSummary String @default("")
+
+  tournament Tournament        @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  events     TournamentEvent[]
+
+  @@unique([tournamentId, code])
+  @@index([tournamentId])
+}
+
+model TournamentEvent {
+  id            String @id @default(cuid())
+  tournamentId  String
+  divisionId    String
+  gameId        String
+  subEventIndex Int
+  label         String
+  status        String @default("pending") // pending | in_progress | completed
+
+  tournament Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  division   Division      @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  game       GameType      @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  result     EventResult?
+  auditLogs  AuditLog[]
+
+  @@unique([divisionId, gameId, subEventIndex])
+  @@index([tournamentId])
+}
+
+model Center {
+  id          String @id @default(cuid())
+  tournamentId String
+  centerCode  String
+  centerName  String @default("")
+  location    String @default("")
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  firstPlaceResults  EventResult[] @relation("FirstPlace")
+  secondPlaceResults EventResult[] @relation("SecondPlace")
+  thirdPlaceResults  EventResult[] @relation("ThirdPlace")
+
+  @@unique([tournamentId, centerCode])
+  @@index([tournamentId])
+}
+
+model EventResult {
+  id                 String   @id @default(cuid())
+  tournamentId       String
+  eventId            String   @unique
+  firstPlaceCenterId  String?
+  secondPlaceCenterId String?
+  thirdPlaceCenterId  String?
+  recordedBy         String   @default("")
+  notes              String   @default("")
+  recordedAt         DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  event        TournamentEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  tournament   Tournament      @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  firstCenter  Center?         @relation("FirstPlace", fields: [firstPlaceCenterId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  secondCenter Center?         @relation("SecondPlace", fields: [secondPlaceCenterId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  thirdCenter  Center?         @relation("ThirdPlace", fields: [thirdPlaceCenterId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([tournamentId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  eventId   String
+  action    String // created | updated | reset
+  oldValues String   @default("") // JSON snapshot
+  newValues String   @default("") // JSON snapshot
+  reason    String   @default("")
+  actor     String   @default("")
+  timestamp DateTime @default(now())
+
+  event TournamentEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Accounts — authentication layer.
+// Reading tournament data is public; every write requires a
+// signed-in account. `admin` = organizer / M&E coordinator,
+// `judge` = field scorekeeper. The first account created
+// becomes the administrator (first-run setup).
+// ─────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("judge") // admin | judge
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

@@ -1,0 +1,22 @@
+# ------------------------------------------------------------------------------
+# Cloudflare Tunnel ingress — add this block to the host's existing
+# cloudflared config.yml (plan §6.3). The service binds to 127.0.0.1:8090,
+# so the tunnel maps the subdomain to it. SSE streams pass through cleanly
+# (plain HTTP streaming; no WebSocket upgrade needed).
+# ------------------------------------------------------------------------------
+#
+# tunnel: <YOUR-TUNNEL-UUID>
+# credentials-file: /root/.cloudflared/<YOUR-TUNNEL-UUID>.json
+#
+# ingress:
+#   # Tournament Web App subdomain
+#   - hostname: tournament.yourdomain.com
+#     service: http://127.0.0.1:8090
+#     originRequest:
+#       noTLSVerify: true
+#       connectTimeout: 10s
+#
+#   # Default fallback for unmapped traffic
+#   - service: http_status:404
+#
+# After editing: systemctl restart cloudflared  (or: cloudflared service install)

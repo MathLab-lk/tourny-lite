@@ -1,0 +1,43 @@
+# ------------------------------------------------------------------------------
+# Tourny Lite — Production Compose
+# Hard resource ceiling guarantees the container stays well inside the
+# 2.0 GB VM budget alongside 25+ existing containers.
+#
+#   docker compose -f deploy/docker-compose.yml up -d --build
+# ------------------------------------------------------------------------------
+
+services:
+  tournament-app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: tourny-lite
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8090:8090" # strictly localhost — exposed via Cloudflare Tunnel
+    volumes:
+      - ./data:/app/db # SQLite database + WAL files
+    environment:
+      - TZ=Asia/Colombo
+      - NODE_ENV=production
+      # Session-signing secret — generate with: openssl rand -hex 32
+      - AUTH_SECRET=${AUTH_SECRET:-change-me-in-production}
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 512M # hard upper limit
+        reservations:
+          cpus: "0.10"
+          memory: 64M # normal operational baseline
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8090/api"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
