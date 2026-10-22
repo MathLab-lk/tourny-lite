@@ -15,15 +15,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Tourny Lite — Tournament Management & Live Scoring",
+  title: "Tourny Lite — Live Tournament Scoring",
   description:
-    "Run competitions with confidence: pre-configured templates, a guided setup for custom events, a field scoring console, a live projector scoreboard and a complete coordination console.",
+    "Run tournaments: record podium results from the field, track progress live, and project the standings.",
   keywords: [
     "tournament management",
     "live scoreboard",
     "scoring",
     "competition",
-    "M&E",
   ],
   icons: {
     icon: "/logo.svg",

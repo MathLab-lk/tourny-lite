@@ -45,28 +45,29 @@
 
 /*
  * Tourny Lite design system
- * — Warm stone neutrals, one restrained emerald accent,
- *   medal tones reserved for podium semantics.
+ * — Utility-first: warm stone neutrals (~70%), quiet surfaces (~20%),
+ *   a single emerald accent (~10%). Medal tones appear ONLY where
+ *   podium semantics require them. One radius, one spacing rhythm.
  */
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0.5rem;
 
   /* Soft warm-stone neutral base */
-  --background: oklch(0.981 0.003 75);
-  --foreground: oklch(0.201 0.005 75);
+  --background: oklch(0.984 0.003 75);
+  --foreground: oklch(0.205 0.005 75);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.201 0.005 75);
+  --card-foreground: oklch(0.205 0.005 75);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.201 0.005 75);
+  --popover-foreground: oklch(0.205 0.005 75);
 
-  /* Deep emerald accent */
+  /* Deep emerald accent — the only brand color */
   --primary: oklch(0.508 0.118 165);
   --primary-foreground: oklch(0.985 0.005 165);
   --secondary: oklch(0.955 0.005 75);
   --secondary-foreground: oklch(0.322 0.008 75);
   --muted: oklch(0.955 0.005 75);
-  --muted-foreground: oklch(0.522 0.01 75);
+  --muted-foreground: oklch(0.474 0.01 75);
   --accent: oklch(0.945 0.015 165);
   --accent-foreground: oklch(0.348 0.06 165);
 

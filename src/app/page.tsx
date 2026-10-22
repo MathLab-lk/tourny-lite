@@ -1,11 +1,14 @@
 'use client'
 
 import { useEffect } from 'react'
-import { TopNav } from '@/components/tournament/top-nav'
+import { AppShell } from '@/components/tournament/app-shell'
 import { HomeView } from '@/components/tournament/home-view'
 import { JudgeView } from '@/components/tournament/judge-view'
 import { ScoreboardView } from '@/components/tournament/scoreboard-view'
-import { MeView } from '@/components/tournament/me-view'
+import { OverviewView } from '@/components/tournament/manage/overview-view'
+import { CentersView } from '@/components/tournament/manage/centers-view'
+import { HistoryView } from '@/components/tournament/manage/history-view'
+import { SettingsView } from '@/components/tournament/manage/settings-view'
 import { PrintSheets } from '@/components/tournament/print-sheets'
 import { AuthDialog } from '@/components/tournament/auth-dialog'
 import { TeamDialog } from '@/components/tournament/team-dialog'
@@ -40,19 +43,15 @@ export default function Page() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-background print:hidden">
-      <TopNav />
-      <main className="flex-1">
+    <div className="print:hidden">
+      <AppShell>
         {view === 'home' ? <HomeView /> : null}
         {view === 'judge' ? <JudgeView /> : null}
-        {view === 'me' ? <MeView /> : null}
-      </main>
-      <footer className="mt-auto border-t bg-muted/30">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-3 text-xs text-muted-foreground sm:px-6">
-          <span>Tourny Lite — tournament management &amp; live scoring</span>
-          <span>Results update live · Sign in to record results</span>
-        </div>
-      </footer>
+        {view === 'overview' ? <OverviewView /> : null}
+        {view === 'centers' ? <CentersView /> : null}
+        {view === 'history' ? <HistoryView /> : null}
+        {view === 'settings' ? <SettingsView /> : null}
+      </AppShell>
       <PrintSheets />
       <AuthDialog />
       <TeamDialog />

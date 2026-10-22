@@ -11,7 +11,14 @@ import type {
   TournamentSummaryDTO,
 } from '@/lib/types'
 
-export type View = 'home' | 'judge' | 'scoreboard' | 'me'
+export type View =
+  | 'home'
+  | 'overview'
+  | 'judge'
+  | 'scoreboard'
+  | 'centers'
+  | 'history'
+  | 'settings'
 export type PrintMode = 'progress' | 'awards' | null
 
 const ACTIVE_KEY = 'tourny_lite_active'

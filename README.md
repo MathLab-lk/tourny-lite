@@ -17,9 +17,11 @@ Run an entire event from one lightweight application:
 - **Live projector scoreboard** — a high-contrast dark screen for the
   auditorium with gold / silver / bronze rank accents and deterministic
   tie-breaking (total → first → second → third places).
-- **Coordination console (M&E)** — a division × game matrix of every event,
+- **Overview console** — a division × game matrix of every event,
   result corrections with mandatory justification, a complete revision
   history, center management and A4 print sheets (progress + awards).
+  Navigation is a quiet app sidebar (bottom tabs on mobile): Overview,
+  Scoring, Scoreboard, Centers, History, Settings.
 - **Secure by default** — tournaments and results are public to read;
   creating, editing and scoring require a signed-in account. Every result
   records who submitted it.

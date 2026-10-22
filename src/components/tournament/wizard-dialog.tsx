@@ -186,10 +186,10 @@ export function WizardDialog({ open, onOpenChange }: WizardDialogProps) {
     const id = await createCustom(payload)
     setBusy(false)
     if (id) {
-      toast({ title: 'Tournament created', description: `${totalEvents} event slots were generated and are ready for scoring.` })
+      toast({ title: 'Tournament created', description: `${totalEvents} event slots are ready for scoring.` })
       onOpenChange(false)
       reset()
-      await openTournament(id, 'me')
+      await openTournament(id, 'overview')
     } else {
       toast({ title: 'Could not create the tournament', description: 'Please review the configuration and try again.', variant: 'destructive' })
     }

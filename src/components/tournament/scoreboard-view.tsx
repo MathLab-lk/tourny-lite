@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import {
   Award,
   Crown,
@@ -27,12 +26,6 @@ export function ScoreboardView() {
   const setView = useAppStore((s) => s.setView)
   const closeTournament = useAppStore((s) => s.closeTournament)
   const printSheet = useAppStore((s) => s.printSheet)
-
-  const [now, setNow] = useState<Date | null>(null)
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000)
-    return () => clearInterval(t)
-  }, [])
 
   const tournament = detail?.tournament
   const standings = detail?.standings ?? []
@@ -82,7 +75,7 @@ export function ScoreboardView() {
           size="sm"
           variant="ghost"
           className="gap-1.5 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-          onClick={() => (tournament ? setView('me') : closeTournament())}
+          onClick={() => (tournament ? setView('overview') : closeTournament())}
         >
           <X className="h-4 w-4" aria-hidden /> Exit
         </Button>
@@ -190,12 +183,13 @@ export function ScoreboardView() {
             <Trophy className="h-3.5 w-3.5" aria-hidden />
             Tie-break order: total, then first, second and third places
           </span>
-          <span aria-hidden>·</span>
           {lastUpdated ? (
-            <span className="tabular-nums">
-              Updated {new Date(lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-              {now ? ` · ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : ''}
-            </span>
+            <>
+              <span aria-hidden>·</span>
+              <span className="tabular-nums">
+                Updated {new Date(lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            </>
           ) : null}
         </p>
       </div>

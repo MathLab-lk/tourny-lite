@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Eye, EyeOff, Loader2, LogIn, ShieldCheck, Trophy } from 'lucide-react'
+import { Eye, EyeOff, Loader2, LogIn, ShieldCheck } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -75,20 +75,15 @@ export function AuthDialog() {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <div className="flex justify-center sm:justify-start">
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <Trophy className="h-6 w-6" aria-hidden />
-          </span>
-        </div>
+      <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle className="text-xl">
-            {isSetup ? 'Welcome to Tourny Lite' : 'Sign in'}
+          <DialogTitle className="text-lg">
+            {isSetup ? 'Set up Tourny Lite' : 'Sign in'}
           </DialogTitle>
           <DialogDescription>
             {isSetup
-              ? 'Create the administrator account for your organisation. You will be able to add scorekeeper accounts afterwards.'
-              : 'Tournament results are public to view. Sign in with your account to record or manage results.'}
+              ? 'Create the administrator account. Scorekeeper accounts can be added afterwards.'
+              : 'Sign in to record and manage results.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -178,7 +173,7 @@ export function AuthDialog() {
 
         {!isSetup ? (
           <p className="text-center text-xs text-muted-foreground">
-            Accounts are issued by your tournament administrator.
+            Accounts are issued by your administrator.
           </p>
         ) : null}
       </DialogContent>

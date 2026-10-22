@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Award, Crown, Medal, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { CenterDTO } from '@/lib/types'
@@ -23,37 +23,34 @@ interface PodiumEditorProps {
 }
 
 /** Medal semantics: gold / silver / bronze — used exclusively for podium places. */
-const SLOT_META: Record<PodiumSlot, { label: string; icon: typeof Crown; active: string; chip: string; text: string }> = {
+const SLOT_META: Record<PodiumSlot, { label: string; short: string; active: string; text: string }> = {
   first: {
     label: '1st place',
-    icon: Crown,
-    active: 'border-amber-500 bg-amber-50 ring-amber-400 dark:bg-amber-950/30',
-    chip: 'bg-amber-400 text-amber-950',
+    short: '1st',
+    active: 'border-amber-500/70 bg-amber-500/10 ring-amber-400/60 dark:bg-amber-950/30',
     text: 'text-amber-700 dark:text-amber-400',
   },
   second: {
     label: '2nd place',
-    icon: Medal,
-    active: 'border-slate-400 bg-slate-50 ring-slate-400 dark:bg-slate-900/50',
-    chip: 'bg-slate-300 text-slate-900',
+    short: '2nd',
+    active: 'border-slate-400/80 bg-slate-400/10 ring-slate-400/60 dark:bg-slate-900/50',
     text: 'text-slate-600 dark:text-slate-300',
   },
   third: {
     label: '3rd place',
-    icon: Award,
-    active: 'border-orange-700/70 bg-orange-50 ring-orange-700/70 dark:bg-orange-950/30',
-    chip: 'bg-orange-700 text-orange-50',
+    short: '3rd',
+    active: 'border-orange-700/60 bg-orange-700/10 ring-orange-700/60 dark:bg-orange-950/30',
     text: 'text-orange-800 dark:text-orange-400',
   },
 }
 
 const ORDER: PodiumSlot[] = ['first', 'second', 'third']
 
-export function PodiumEditor({ centers, points, value, onChange, disabled, compact }: PodiumEditorProps) {
+export function PodiumEditor({ centers, points, value, onChange, disabled }: PodiumEditorProps) {
   // Slot the user explicitly selected (overrides auto-advance)
   const [explicitSlot, setExplicitSlot] = useState<PodiumSlot | null>(null)
 
-  // Derived active slot: explicit user choice, else the first unfilled place.
+  // Derived active slot: explicit choice, else the first unfilled place.
   // When every place is filled and none was selected, no slot is active —
   // preventing accidental overwrites of a full podium.
   const activeSlot: PodiumSlot | null =
@@ -80,14 +77,13 @@ export function PodiumEditor({ centers, points, value, onChange, disabled, compa
   const centerOf = (id: string | null) => centers.find((c) => c.id === id) ?? null
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Podium slots */}
-      <div className={cn('grid gap-3', compact ? 'grid-cols-3' : 'grid-cols-1 sm:grid-cols-3')}>
+      <div className="grid grid-cols-3 gap-2">
         {ORDER.map((slot) => {
           const meta = SLOT_META[slot]
           const center = centerOf(value[slot])
           const isActive = activeSlot === slot
-          const Icon = meta.icon
           return (
             <button
               key={slot}
@@ -95,37 +91,26 @@ export function PodiumEditor({ centers, points, value, onChange, disabled, compa
               onClick={() => selectSlot(slot)}
               disabled={disabled}
               className={cn(
-                'group relative rounded-xl border-2 p-3 text-left transition-all min-h-[76px]',
-                isActive ? cn(meta.active, 'ring-2 ring-offset-2 ring-offset-background') : 'border-border bg-card hover:bg-muted/50',
+                'relative rounded-lg border p-2.5 text-left transition-all',
+                isActive ? cn(meta.active, 'ring-2') : 'border-border bg-card hover:bg-muted/40',
                 disabled && 'cursor-not-allowed opacity-60'
               )}
               aria-pressed={isActive}
             >
-              <div className="flex items-center justify-between">
-                <span className={cn('flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide', meta.text)}>
-                  <Icon className="h-3.5 w-3.5" aria-hidden />
-                  {meta.label}
-                </span>
-                <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums', meta.chip)}>
-                  {points[slot]} pts
-                </span>
-              </div>
-              <div className="mt-1.5 flex items-center justify-between gap-2">
+              <span className="flex items-center justify-between gap-1">
+                <span className={cn('text-[11px] font-semibold', meta.text)}>{meta.short}</span>
+                <span className="text-[10px] tabular-nums text-muted-foreground">{points[slot]} pts</span>
+              </span>
+              <span className="mt-1 flex items-center justify-between gap-1">
                 {center ? (
-                  <span className="truncate text-lg font-semibold leading-tight tabular-nums">
+                  <span className="min-w-0 truncate text-base font-semibold leading-tight tabular-nums">
                     {center.centerCode}
-                    {center.centerName ? (
-                      <span className="ml-2 text-sm font-normal text-muted-foreground">{center.centerName}</span>
-                    ) : null}
                   </span>
                 ) : (
-                  <span className="text-sm text-muted-foreground">
-                    {isActive && !disabled ? 'Select a center below…' : 'Select to assign'}
+                  <span className="text-xs text-muted-foreground">
+                    {isActive && !disabled ? 'Tap a center' : 'Empty'}
                   </span>
                 )}
-                {center && !isActive ? (
-                  <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Change</span>
-                ) : null}
                 {center && !disabled ? (
                   <span
                     role="button"
@@ -141,12 +126,12 @@ export function PodiumEditor({ centers, points, value, onChange, disabled, compa
                         clearSlot(slot)
                       }
                     }}
-                    className="rounded-full p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   >
-                    <X className="h-4 w-4" aria-hidden />
+                    <X className="h-3.5 w-3.5" aria-hidden />
                   </span>
                 ) : null}
-              </div>
+              </span>
             </button>
           )
         })}
@@ -154,14 +139,14 @@ export function PodiumEditor({ centers, points, value, onChange, disabled, compa
 
       {/* Center buttons */}
       <div>
-        <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">
           {disabled
             ? 'Sign in to assign places'
             : activeSlot
-              ? 'Select a center for the highlighted place'
-              : 'All places assigned — select a place card above to change it'}
+              ? `Select the ${SLOT_META[activeSlot].label.toLowerCase()} center`
+              : 'All places assigned — tap a place to change it'}
         </p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
           {centers.map((c) => {
             const takenBy = ORDER.find((s) => value[s] === c.id)
             const assignedHere = activeSlot !== null && value[activeSlot] === c.id
@@ -173,14 +158,14 @@ export function PodiumEditor({ centers, points, value, onChange, disabled, compa
                 disabled={disabled || !activeSlot || (takenBy !== undefined && !assignedHere)}
                 onClick={() => assign(c.id)}
                 className={cn(
-                  'h-14 flex-col items-center justify-center gap-0.5 text-base font-semibold tabular-nums',
+                  'h-14 flex-col items-center justify-center gap-0.5 text-base font-semibold tabular-nums transition-transform active:scale-95',
                   takenBy !== undefined && !assignedHere && 'opacity-40'
                 )}
-                aria-label={`Center ${c.centerCode}${takenBy ? `, already assigned to ${takenBy} place` : ''}`}
+                aria-label={`Center ${c.centerCode}${takenBy ? `, already ${takenBy} place` : ''}`}
               >
                 {c.centerCode}
                 {c.centerName ? (
-                  <span className="max-w-full truncate text-[11px] font-normal text-muted-foreground">
+                  <span className="max-w-full truncate text-[10px] font-normal text-muted-foreground">
                     {c.centerName}
                   </span>
                 ) : null}
