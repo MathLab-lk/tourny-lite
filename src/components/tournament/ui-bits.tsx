@@ -1,6 +1,7 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
+import { animate, useReducedMotion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import type { EventStatus, TournamentStatus } from '@/lib/types'
 
@@ -116,6 +117,44 @@ export const medalText = {
   bronze: 'text-orange-700 dark:text-orange-400',
 } as const
 
+/* ── Animated number ───────────────────────────────────────────── */
+
+/** Count-up number — springs to new values as data arrives live. */
+export function AnimatedNumber({
+  value,
+  className,
+}: {
+  value: number
+  className?: string
+}) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const prev = useRef(value)
+  const reduced = useReducedMotion()
+
+  useEffect(() => {
+    if (reduced) {
+      prev.current = value
+      if (ref.current) ref.current.textContent = String(Math.round(value))
+      return
+    }
+    const controls = animate(prev.current, value, {
+      duration: 0.9,
+      ease: [0.16, 1, 0.3, 1],
+      onUpdate: (v) => {
+        if (ref.current) ref.current.textContent = String(Math.round(v))
+      },
+    })
+    prev.current = value
+    return () => controls.stop()
+  }, [value, reduced])
+
+  return (
+    <span ref={ref} className={cn('nums', className)}>
+      {Math.round(value)}
+    </span>
+  )
+}
+
 /* ── Page header ──────────────────────────────────────────────── */
 
 /** Consistent view header: title row + optional meta + actions. */
@@ -180,7 +219,12 @@ export function StatStrip({
   className?: string
 }) {
   return (
-    <div className={cn('grid grid-cols-2 divide-border rounded-lg border bg-card sm:grid-cols-4 sm:divide-x', className)}>
+    <div
+      className={cn(
+        'lift grid grid-cols-2 divide-border rounded-lg border bg-card shadow-xs sm:grid-cols-4 sm:divide-x',
+        className
+      )}
+    >
       {items.map((item) => (
         <div key={item.label} className="px-4 py-3">
           <p className="text-xs text-muted-foreground">{item.label}</p>

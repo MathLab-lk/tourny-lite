@@ -147,12 +147,28 @@ model AuditLog {
 // ─────────────────────────────────────────────────────────────
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  passwordHash String
-  role         String   @default("judge") // admin | judge
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String           @id @default(cuid())
+  email          String           @unique
+  name           String
+  passwordHash   String
+  role           String           @default("judge") // admin | judge
+  active         Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  redeemedInvite InvitationCode?  @relation("InvitationRedemption")
+}
+
+// Invitation codes — the admin generates a code and shares it;
+// the recipient uses it once to create their own account with
+// the role baked into the code. No expiry unless set.
+model InvitationCode {
+  id        String    @id @default(cuid())
+  code      String    @unique // 8 chars, unambiguous alphabet
+  role      String    @default("judge") // admin | judge
+  createdBy String    @default("") // admin name at generation time
+  createdAt DateTime  @default(now())
+  expiresAt DateTime? // null = never expires
+  usedAt    DateTime? // set on redemption (single use)
+  usedById  String?   @unique
+  usedBy    User?     @relation("InvitationRedemption", fields: [usedById], references: [id], onDelete: SetNull)
 }

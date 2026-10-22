@@ -5,6 +5,7 @@ import type {
   AdminUserDTO,
   AuditEntryDTO,
   CustomTournamentPayload,
+  InviteDTO,
   ResultSubmitPayload,
   SessionUserDTO,
   TournamentDetailDTO,
@@ -19,7 +20,7 @@ export type View =
   | 'centers'
   | 'history'
   | 'settings'
-export type PrintMode = 'progress' | 'awards' | null
+export type PrintMode = 'progress' | null
 
 const ACTIVE_KEY = 'tourny_lite_active'
 const queueKey = (tid: string) => `tourny_lite_queue_${tid}`
@@ -79,6 +80,8 @@ interface AppState {
   authDialogOpen: boolean
   teamDialogOpen: boolean
   users: AdminUserDTO[]
+  invites: InviteDTO[]
+  loadingInvites: boolean
 
   setView: (view: View) => void
   hydrate: () => void
@@ -86,12 +89,24 @@ interface AppState {
   setTeamDialogOpen: (open: boolean) => void
   loadSession: () => Promise<void>
   signIn: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
+  redeemInvite: (
+    code: string,
+    name: string,
+    email: string,
+    password: string
+  ) => Promise<{ ok: boolean; error?: string }>
   completeSetup: (name: string, email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   signOut: () => Promise<void>
   loadUsers: () => Promise<void>
   createUser: (input: { name: string; email: string; password: string; role: string }) => Promise<{ ok: boolean; error?: string }>
   updateUser: (id: string, patch: { role?: string; active?: boolean; password?: string }) => Promise<{ ok: boolean; error?: string }>
   deleteUser: (id: string) => Promise<{ ok: boolean; error?: string }>
+  loadInvites: () => Promise<void>
+  createInvite: (input: {
+    role: 'admin' | 'judge'
+    expiresInDays?: number
+  }) => Promise<{ ok: boolean; code?: string; error?: string }>
+  deleteInvite: (id: string) => Promise<{ ok: boolean; error?: string }>
 
   loadTournaments: () => Promise<void>
   openTournament: (id: string, view?: View) => Promise<void>
@@ -137,6 +152,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   authDialogOpen: false,
   teamDialogOpen: false,
   users: [],
+  invites: [],
+  loadingInvites: false,
 
   setView: (view) => set({ view }),
 
@@ -180,6 +197,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { ok: true }
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : 'Sign in failed' }
+    }
+  },
+
+  redeemInvite: async (code, name, email, password) => {
+    try {
+      const data = await api<{ user: SessionUserDTO }>('/api/auth/redeem', {
+        method: 'POST',
+        body: JSON.stringify({ code, name, email, password }),
+      })
+      set({ session: data.user, authDialogOpen: false })
+      void get().flushQueue()
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Could not create the account' }
     }
   },
 
@@ -243,6 +274,41 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { ok: true }
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : 'Could not delete the account' }
+    }
+  },
+
+  // ── Invitation codes (admin) ───────────────────────────────
+
+  loadInvites: async () => {
+    set({ loadingInvites: true })
+    try {
+      const data = await api<{ invites: InviteDTO[] }>('/api/admin/invites')
+      set({ invites: data.invites, loadingInvites: false })
+    } catch {
+      set({ invites: [], loadingInvites: false })
+    }
+  },
+
+  createInvite: async (input) => {
+    try {
+      const data = await api<{ invite: InviteDTO }>('/api/admin/invites', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+      set({ invites: [data.invite, ...get().invites] })
+      return { ok: true, code: data.invite.code }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Could not generate a code' }
+    }
+  },
+
+  deleteInvite: async (id) => {
+    try {
+      await api(`/api/admin/invites/${id}`, { method: 'DELETE' })
+      set({ invites: get().invites.filter((i) => i.id !== id) })
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Could not delete the code' }
     }
   },
 
@@ -479,16 +545,25 @@ export const useAppStore = create<AppState>((set, get) => ({
   printSheet: (mode) => {
     set({ printMode: mode })
     if (typeof window === 'undefined') return
+    // The class drives the print CSS: everything except the print
+    // root is hidden, so stray portals (menus, dialogs, toasts) can
+    // never leak into the printout.
+    const root = document.documentElement
+    root.classList.add('tourny-printing')
+    const cleanup = () => {
+      root.classList.remove('tourny-printing')
+      set({ printMode: null })
+    }
     if (!printListenerBound) {
       printListenerBound = true
-      window.addEventListener('afterprint', () => set({ printMode: null }))
+      window.addEventListener('afterprint', cleanup)
     }
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         try {
           window.print()
         } catch {
-          set({ printMode: null })
+          cleanup()
         }
       })
     })

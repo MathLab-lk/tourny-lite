@@ -1,14 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, Loader2, Presentation, Printer } from 'lucide-react'
+import { Presentation, Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { useAppStore } from '@/store/app-store'
 import { useToast } from '@/hooks/use-toast'
 import { EventDialog } from '@/components/tournament/event-dialog'
@@ -18,6 +12,7 @@ import {
   PageHeader,
   StatStrip,
   TournamentStatusChip,
+  AnimatedNumber,
   eventStatusMeta,
 } from '@/components/tournament/ui-bits'
 import { cn } from '@/lib/utils'
@@ -68,9 +63,9 @@ export function OverviewView() {
 
   const { tournament, divisions, games, centers, events, progress } = detail
 
-  const doPrint = (mode: 'progress' | 'awards') => {
+  const doPrint = () => {
     try {
-      printSheet(mode)
+      printSheet('progress')
     } catch {
       toast({ title: 'Could not open the print sheet', variant: 'destructive' })
     }
@@ -99,22 +94,9 @@ export function OverviewView() {
             <Button size="sm" className="h-8 gap-1.5" onClick={() => setView('scoreboard')}>
               <Presentation className="h-4 w-4" aria-hidden /> Scoreboard
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="outline" className="h-8 gap-1.5">
-                  <Printer className="h-4 w-4" aria-hidden /> Print
-                  <ChevronDown className="h-3.5 w-3.5 opacity-60" aria-hidden />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => doPrint('progress')}>
-                  <Printer className="mr-2 h-4 w-4" aria-hidden /> Progress sheet
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => doPrint('awards')}>
-                  <Printer className="mr-2 h-4 w-4" aria-hidden /> Awards scorecard
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={doPrint}>
+              <Printer className="h-4 w-4" aria-hidden /> Print
+            </Button>
           </>
         }
       />
@@ -135,9 +117,9 @@ export function OverviewView() {
               </span>
             ),
           },
-          { label: 'In progress', value: progress.inProgress },
-          { label: 'Pending', value: progress.pending },
-          { label: 'Centers', value: centers.length },
+          { label: 'In progress', value: <AnimatedNumber value={progress.inProgress} /> },
+          { label: 'Pending', value: <AnimatedNumber value={progress.pending} /> },
+          { label: 'Centers', value: <AnimatedNumber value={centers.length} /> },
         ]}
       />
 

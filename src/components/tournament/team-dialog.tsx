@@ -23,6 +23,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { InvitesPanel } from '@/components/tournament/invites-panel'
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/store/app-store'
 import type { AdminUserDTO } from '@/lib/types'
@@ -124,11 +126,17 @@ export function TeamDialog() {
               <ShieldCheck className="h-5 w-5 text-primary" aria-hidden /> Team &amp; access
             </DialogTitle>
             <DialogDescription>
-              Create accounts for coordinators and scorekeepers. Suspended accounts can no longer
-              sign in; recorded results keep the original author&apos;s name.
+              Add people directly or share an invitation code they can use to
+              set up their own account.
             </DialogDescription>
           </DialogHeader>
 
+          <Tabs defaultValue="accounts">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="accounts">Accounts</TabsTrigger>
+              <TabsTrigger value="invitations">Invitations</TabsTrigger>
+            </TabsList>
+            <TabsContent value="accounts" className="mt-4 space-y-4">
           {/* Create account */}
           <form
             className="grid gap-3 rounded-xl border bg-muted/40 p-4 sm:grid-cols-2"
@@ -246,6 +254,11 @@ export function TeamDialog() {
               ) : null}
             </ul>
           </div>
+            </TabsContent>
+            <TabsContent value="invitations" className="mt-4">
+              <InvitesPanel />
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 

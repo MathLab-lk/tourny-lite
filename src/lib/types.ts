@@ -17,6 +17,17 @@ export interface AdminUserDTO extends SessionUserDTO {
   createdAt: string
 }
 
+export interface InviteDTO {
+  id: string
+  code: string
+  role: UserRole
+  createdBy: string
+  createdAt: string
+  expiresAt: string | null
+  usedAt: string | null
+  usedByName: string | null
+}
+
 export interface TournamentDTO {
   id: string
   name: string

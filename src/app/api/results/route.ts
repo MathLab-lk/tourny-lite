@@ -16,10 +16,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const payload = (await req.json()) as ResultSubmitPayload
-    const out = await submitResult(
-      { ...payload, recordedBy: guard.session.name },
-      guard.session
-    )
+    const out = await submitResult({ ...payload, recordedBy: guard.session.name })
     return NextResponse.json(out, { status: out.isCorrection ? 200 : 201 })
   } catch (err) {
     const { message, status } = friendlyError(err, 'Failed to submit result')

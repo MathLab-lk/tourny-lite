@@ -13,6 +13,7 @@ import { PrintSheets } from '@/components/tournament/print-sheets'
 import { AuthDialog } from '@/components/tournament/auth-dialog'
 import { TeamDialog } from '@/components/tournament/team-dialog'
 import { useAppStore } from '@/store/app-store'
+import { MotionConfig } from 'framer-motion'
 
 export default function Page() {
   const view = useAppStore((s) => s.view)
@@ -32,29 +33,28 @@ export default function Page() {
     }
   }, [hydrate, setOnline])
 
-  // Scoreboard is a full-screen projector overlay
-  if (view === 'scoreboard') {
-    return (
-      <>
-        <ScoreboardView />
-        <PrintSheets />
-      </>
-    )
-  }
-
   return (
-    <div className="print:hidden">
-      <AppShell>
-        {view === 'home' ? <HomeView /> : null}
-        {view === 'judge' ? <JudgeView /> : null}
-        {view === 'overview' ? <OverviewView /> : null}
-        {view === 'centers' ? <CentersView /> : null}
-        {view === 'history' ? <HistoryView /> : null}
-        {view === 'settings' ? <SettingsView /> : null}
-      </AppShell>
+    <MotionConfig reducedMotion="user">
+      {/* Scoreboard is a full-screen projector overlay */}
+      {view === 'scoreboard' ? (
+        <ScoreboardView />
+      ) : (
+        <>
+          <AppShell>
+            {view === 'home' ? <HomeView /> : null}
+            {view === 'judge' ? <JudgeView /> : null}
+            {view === 'overview' ? <OverviewView /> : null}
+            {view === 'centers' ? <CentersView /> : null}
+            {view === 'history' ? <HistoryView /> : null}
+            {view === 'settings' ? <SettingsView /> : null}
+          </AppShell>
+          <AuthDialog />
+          <TeamDialog />
+        </>
+      )}
+      {/* Print sheet lives at the root, outside every app wrapper,
+          and only mounts while a print is in flight. */}
       <PrintSheets />
-      <AuthDialog />
-      <TeamDialog />
-    </div>
+    </MotionConfig>
   )
 }

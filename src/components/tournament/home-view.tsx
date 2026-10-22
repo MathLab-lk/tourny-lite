@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { motion } from 'framer-motion'
 import {
   ArrowRight,
   Copy,
@@ -149,11 +150,21 @@ export function HomeView() {
             }
           />
         ) : (
-          <ul className="divide-y rounded-lg border bg-card">
-            {tournaments.map((t) => {
+          <ul className="divide-y rounded-lg border bg-card shadow-xs">
+            {tournaments.map((t, i) => {
               const percent = t.eventCount === 0 ? 0 : Math.round((t.completedCount / t.eventCount) * 100)
               return (
-                <li key={t.id} className="group relative flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 sm:gap-4">
+                <motion.li
+                  key={t.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    delay: Math.min(i * 0.045, 0.32),
+                    duration: 0.4,
+                    ease: [0.16, 1, 0.3, 1],
+                  }}
+                  className="group relative flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 sm:gap-4"
+                >
                   <button
                     type="button"
                     onClick={() => openRow(t.id)}
@@ -223,7 +234,7 @@ export function HomeView() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   ) : null}
-                </li>
+                </motion.li>
               )
             })}
           </ul>
@@ -242,7 +253,7 @@ export function HomeView() {
               type="button"
               onClick={launchPreset}
               disabled={launching}
-              className="flex items-center gap-3 rounded-lg border p-3.5 text-left transition-colors hover:bg-muted/50 disabled:opacity-60"
+              className="lift flex items-center gap-3 rounded-lg border p-3.5 text-left transition-colors hover:bg-muted/50 hover:border-primary/40 disabled:opacity-60"
             >
               <LayoutTemplate className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
               <span className="min-w-0 flex-1">
@@ -264,7 +275,7 @@ export function HomeView() {
                 setNewOpen(false)
                 setWizardOpen(true)
               }}
-              className="flex items-center gap-3 rounded-lg border p-3.5 text-left transition-colors hover:bg-muted/50"
+              className="lift flex items-center gap-3 rounded-lg border p-3.5 text-left transition-colors hover:bg-muted/50 hover:border-primary/40"
             >
               <Plus className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
               <span className="min-w-0 flex-1">

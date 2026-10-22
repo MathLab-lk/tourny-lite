@@ -17,11 +17,9 @@ Run an entire event from one lightweight application:
 - **Live projector scoreboard** — a high-contrast dark screen for the
   auditorium with gold / silver / bronze rank accents and deterministic
   tie-breaking (total → first → second → third places).
-- **Overview console** — a division × game matrix of every event,
+- **Coordination console (M&E)** — a division × game matrix of every event,
   result corrections with mandatory justification, a complete revision
-  history, center management and A4 print sheets (progress + awards).
-  Navigation is a quiet app sidebar (bottom tabs on mobile): Overview,
-  Scoring, Scoreboard, Centers, History, Settings.
+  history, center management and A4 print sheets (event progress).
 - **Secure by default** — tournaments and results are public to read;
   creating, editing and scoring require a signed-in account. Every result
   records who submitted it.
@@ -35,7 +33,17 @@ Run an entire event from one lightweight application:
 | **Administrator** | Everything: create / duplicate / delete tournaments, manage centers, reset results, settings, team accounts |
 
 The first account created becomes the administrator (first-run setup);
-further accounts are issued from *Team & access*.
+further accounts are added from *Team & access* — either created directly
+or via single-use invitation codes the recipient redeems to set up their
+own credentials.
+
+### Invitation codes
+
+From *Team & access → Invitations*, generate a code (scorekeeper or
+administrator role, optional expiry) and share it. The recipient opens
+the sign-in dialog, chooses *Have an invitation code?*, enters the code
+and sets their own name, email and password. Codes are single-use and
+can be deleted at any time.
 
 ## Technology
 
@@ -65,10 +73,11 @@ bun run scripts/battle-test.ts
 ```
 
 The battle suite exercises authentication, role enforcement (guest /
-scorekeeper / administrator), tournament lifecycle, result guardrails and
-standings mathematics, corrections and the audit trail, center management,
-the live event stream, concurrent submissions and account management —
-103 assertions in total.
+scorekeeper / administrator), invitation codes (generation, expiry,
+single-use redemption, role grants), tournament lifecycle, result
+guardrails and standings mathematics, corrections and the audit trail,
+center management, the live event stream, concurrent submissions and
+account management — 127 assertions in total.
 
 ## Deployment
 

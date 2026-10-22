@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Eye, EyeOff, Loader2, LogIn, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, Loader2, LogIn, ShieldCheck, Ticket } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -14,10 +14,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAppStore } from '@/store/app-store'
 
+type Mode = 'signin' | 'redeem'
+
 /**
- * Account dialog with two modes:
+ * Account dialog with three modes:
  *  - First-run setup: creates the administrator account.
  *  - Sign in: email + password for existing accounts.
+ *  - Join: redeem an invitation code and set your own details.
  */
 export function AuthDialog() {
   const open = useAppStore((s) => s.authDialogOpen)
@@ -26,7 +29,9 @@ export function AuthDialog() {
   const session = useAppStore((s) => s.session)
 
   const isSetup = setupRequired && !session
+  const [mode, setMode] = useState<Mode>('signin')
 
+  const [code, setCode] = useState('')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -38,6 +43,8 @@ export function AuthDialog() {
   const handleOpenChange = (next: boolean) => {
     if (!next) {
       // Reset the form whenever the dialog closes (button, overlay or Escape)
+      setMode('signin')
+      setCode('')
       setName('')
       setEmail('')
       setPassword('')
@@ -47,6 +54,8 @@ export function AuthDialog() {
     }
     setOpen(next)
   }
+
+  const needsConfirm = isSetup || mode === 'redeem'
 
   const submit = async (e?: React.FormEvent) => {
     e?.preventDefault()
@@ -61,34 +70,68 @@ export function AuthDialog() {
       const out = await useAppStore.getState().completeSetup(name, email, password)
       setBusy(false)
       if (!out.ok) setError(out.error ?? 'Setup failed')
-    } else {
-      setBusy(true)
-      const out = await useAppStore.getState().signIn(email, password)
-      setBusy(false)
-      if (!out.ok) setError(out.error ?? 'Sign in failed')
+      return
     }
+
+    if (mode === 'redeem') {
+      if (password !== confirm) {
+        setError('The passwords do not match.')
+        return
+      }
+      setBusy(true)
+      const out = await useAppStore.getState().redeemInvite(code, name, email, password)
+      setBusy(false)
+      if (!out.ok) setError(out.error ?? 'Could not create the account')
+      return
+    }
+
+    setBusy(true)
+    const out = await useAppStore.getState().signIn(email, password)
+    setBusy(false)
+    if (!out.ok) setError(out.error ?? 'Sign in failed')
   }
 
   const canSubmit = isSetup
     ? name.trim().length >= 2 && email.trim().length > 3 && password.length >= 8 && password === confirm
-    : email.trim().length > 3 && password.length > 0
+    : mode === 'redeem'
+      ? code.trim().length >= 6 && name.trim().length >= 2 && email.trim().length > 3 && password.length >= 8 && password === confirm
+      : email.trim().length > 3 && password.length > 0
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="text-lg">
-            {isSetup ? 'Set up Tourny Lite' : 'Sign in'}
+            {isSetup ? 'Set up Tourny Lite' : mode === 'redeem' ? 'Join with an invitation code' : 'Sign in'}
           </DialogTitle>
           <DialogDescription>
             {isSetup
               ? 'Create the administrator account. Scorekeeper accounts can be added afterwards.'
-              : 'Sign in to record and manage results.'}
+              : mode === 'redeem'
+                ? 'Enter the code your administrator shared, then set up your account.'
+                : 'Sign in to record and manage results.'}
           </DialogDescription>
         </DialogHeader>
 
         <form className="space-y-4" onSubmit={submit}>
-          {isSetup ? (
+          {mode === 'redeem' ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="auth-code">Invitation code</Label>
+              <Input
+                id="auth-code"
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                placeholder="ABCD-EFGH"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                className="font-mono text-base font-semibold tracking-[0.2em] uppercase"
+                required
+              />
+            </div>
+          ) : null}
+
+          {isSetup || mode === 'redeem' ? (
             <div className="space-y-1.5">
               <Label htmlFor="auth-name">Your name</Label>
               <Input
@@ -121,11 +164,11 @@ export function AuthDialog() {
               <Input
                 id="auth-password"
                 type={showPassword ? 'text' : 'password'}
-                autoComplete={isSetup ? 'new-password' : 'current-password'}
+                autoComplete={needsConfirm ? 'new-password' : 'current-password'}
                 className="pr-10"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={isSetup ? 'At least 8 characters' : 'Your password'}
+                placeholder={needsConfirm ? 'At least 8 characters' : 'Your password'}
                 required
               />
               <button
@@ -139,7 +182,7 @@ export function AuthDialog() {
             </div>
           </div>
 
-          {isSetup ? (
+          {needsConfirm ? (
             <div className="space-y-1.5">
               <Label htmlFor="auth-confirm">Confirm password</Label>
               <Input
@@ -164,17 +207,39 @@ export function AuthDialog() {
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
             ) : isSetup ? (
               <ShieldCheck className="h-4 w-4" aria-hidden />
+            ) : mode === 'redeem' ? (
+              <Ticket className="h-4 w-4" aria-hidden />
             ) : (
               <LogIn className="h-4 w-4" aria-hidden />
             )}
-            {isSetup ? 'Create administrator account' : 'Sign in'}
+            {isSetup ? 'Create administrator account' : mode === 'redeem' ? 'Create account' : 'Sign in'}
           </Button>
         </form>
 
         {!isSetup ? (
-          <p className="text-center text-xs text-muted-foreground">
-            Accounts are issued by your administrator.
-          </p>
+          mode === 'redeem' ? (
+            <button
+              type="button"
+              className="flex w-full items-center justify-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => {
+                setMode('signin')
+                setError('')
+              }}
+            >
+              <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to sign in
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="flex w-full items-center justify-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => {
+                setMode('redeem')
+                setError('')
+              }}
+            >
+              <Ticket className="h-3.5 w-3.5" aria-hidden /> Have an invitation code? Create your account
+            </button>
+          )
         ) : null}
       </DialogContent>
     </Dialog>

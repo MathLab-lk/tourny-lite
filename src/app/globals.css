@@ -43,93 +43,116 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* Motion curves — a gentle overshoot spring and a silky expo out.
+   Usable both as CSS vars (--ease-spring) and Tailwind utilities
+   (ease-spring / ease-out-expo). */
+@theme {
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 /*
- * Tourny Lite design system
- * — Utility-first: warm stone neutrals (~70%), quiet surfaces (~20%),
- *   a single emerald accent (~10%). Medal tones appear ONLY where
- *   podium semantics require them. One radius, one spacing rhythm.
+ * Tourny Lite design system — "quiet depth".
+ * A calm, layered surface world: one emerald accent, deep translucent
+ * chrome over a slowly drifting aurora, hairline borders, tabular
+ * numerals. Motion is spring-based and purposeful; medal tones appear
+ * only where podium semantics require them.
  */
 
 :root {
-  --radius: 0.5rem;
+  --radius: 0.625rem;
 
-  /* Soft warm-stone neutral base */
-  --background: oklch(0.984 0.003 75);
-  --foreground: oklch(0.205 0.005 75);
+  /* Light — sage-tinted paper */
+  --background: oklch(0.982 0.005 148);
+  --foreground: oklch(0.19 0.01 160);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.205 0.005 75);
+  --card-foreground: oklch(0.19 0.01 160);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.205 0.005 75);
+  --popover-foreground: oklch(0.19 0.01 160);
 
   /* Deep emerald accent — the only brand color */
-  --primary: oklch(0.508 0.118 165);
-  --primary-foreground: oklch(0.985 0.005 165);
-  --secondary: oklch(0.955 0.005 75);
-  --secondary-foreground: oklch(0.322 0.008 75);
-  --muted: oklch(0.955 0.005 75);
-  --muted-foreground: oklch(0.474 0.01 75);
-  --accent: oklch(0.945 0.015 165);
-  --accent-foreground: oklch(0.348 0.06 165);
+  --primary: oklch(0.52 0.128 162);
+  --primary-foreground: oklch(0.985 0.01 160);
+  --secondary: oklch(0.957 0.006 150);
+  --secondary-foreground: oklch(0.31 0.012 155);
+  --muted: oklch(0.957 0.006 150);
+  --muted-foreground: oklch(0.46 0.014 155);
+  --accent: oklch(0.938 0.024 162);
+  --accent-foreground: oklch(0.34 0.065 163);
 
   --destructive: oklch(0.577 0.215 27);
-  --border: oklch(0.912 0.006 75);
-  --input: oklch(0.885 0.007 75);
-  --ring: oklch(0.62 0.12 165);
+  --border: oklch(0.905 0.008 150);
+  --input: oklch(0.878 0.009 150);
+  --ring: oklch(0.62 0.128 162);
 
-  --chart-1: oklch(0.508 0.118 165);
+  --chart-1: oklch(0.52 0.128 162);
   --chart-2: oklch(0.75 0.15 85);
   --chart-3: oklch(0.62 0.08 260);
   --chart-4: oklch(0.66 0.15 45);
   --chart-5: oklch(0.55 0.1 200);
 
-  --sidebar: oklch(0.985 0.002 75);
-  --sidebar-foreground: oklch(0.201 0.005 75);
-  --sidebar-primary: oklch(0.508 0.118 165);
-  --sidebar-primary-foreground: oklch(0.985 0.005 165);
-  --sidebar-accent: oklch(0.945 0.015 165);
-  --sidebar-accent-foreground: oklch(0.348 0.06 165);
-  --sidebar-border: oklch(0.912 0.006 75);
-  --sidebar-ring: oklch(0.62 0.12 165);
+  --sidebar: oklch(0.975 0.006 150);
+  --sidebar-foreground: oklch(0.185 0.01 160);
+  --sidebar-primary: oklch(0.52 0.128 162);
+  --sidebar-primary-foreground: oklch(0.985 0.01 160);
+  --sidebar-accent: oklch(0.938 0.024 162);
+  --sidebar-accent-foreground: oklch(0.34 0.065 163);
+  --sidebar-border: oklch(0.905 0.008 150);
+  --sidebar-ring: oklch(0.62 0.128 162);
+
+  /* Ambient layers — very quiet in light mode */
+  --glow: oklch(0.72 0.15 163 / 0.4);
+  --aurora-1: oklch(0.72 0.16 163 / 0.17);
+  --aurora-2: oklch(0.78 0.11 205 / 0.13);
+  --aurora-3: oklch(0.84 0.12 85 / 0.09);
+  --noise-opacity: 0.022;
 }
 
 .dark {
-  /* Rich near-black with a faint green undertone */
-  --background: oklch(0.146 0.004 165);
-  --foreground: oklch(0.955 0.004 165);
-  --card: oklch(0.191 0.005 165);
-  --card-foreground: oklch(0.955 0.004 165);
-  --popover: oklch(0.191 0.005 165);
-  --popover-foreground: oklch(0.955 0.004 165);
+  /* Rich deep green-black with layered depth */
+  --background: oklch(0.128 0.006 168);
+  --foreground: oklch(0.958 0.005 160);
+  --card: oklch(0.174 0.009 168);
+  --card-foreground: oklch(0.958 0.005 160);
+  --popover: oklch(0.188 0.009 168);
+  --popover-foreground: oklch(0.958 0.005 160);
 
   /* Brightened emerald for dark surfaces */
-  --primary: oklch(0.772 0.15 163);
-  --primary-foreground: oklch(0.185 0.04 165);
-  --secondary: oklch(0.256 0.006 165);
-  --secondary-foreground: oklch(0.955 0.004 165);
-  --muted: oklch(0.242 0.005 165);
-  --muted-foreground: oklch(0.688 0.008 165);
-  --accent: oklch(0.272 0.02 165);
-  --accent-foreground: oklch(0.872 0.08 163);
+  --primary: oklch(0.8 0.172 160);
+  --primary-foreground: oklch(0.16 0.05 165);
+  --secondary: oklch(0.236 0.009 168);
+  --secondary-foreground: oklch(0.958 0.005 160);
+  --muted: oklch(0.222 0.008 168);
+  --muted-foreground: oklch(0.677 0.012 163);
+  --accent: oklch(0.262 0.028 164);
+  --accent-foreground: oklch(0.878 0.085 162);
 
   --destructive: oklch(0.666 0.19 25);
-  --border: oklch(1 0 0 / 9%);
-  --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.62 0.12 165);
+  --border: oklch(1 0 0 / 8.5%);
+  --input: oklch(1 0 0 / 13%);
+  --ring: oklch(0.62 0.128 162);
 
-  --chart-1: oklch(0.772 0.15 163);
+  --chart-1: oklch(0.8 0.172 160);
   --chart-2: oklch(0.8 0.15 85);
   --chart-3: oklch(0.65 0.12 260);
   --chart-4: oklch(0.7 0.14 45);
   --chart-5: oklch(0.62 0.11 200);
 
-  --sidebar: oklch(0.191 0.005 165);
-  --sidebar-foreground: oklch(0.955 0.004 165);
-  --sidebar-primary: oklch(0.772 0.15 163);
-  --sidebar-primary-foreground: oklch(0.185 0.04 165);
-  --sidebar-accent: oklch(0.272 0.02 165);
-  --sidebar-accent-foreground: oklch(0.872 0.08 163);
-  --sidebar-border: oklch(1 0 0 / 9%);
-  --sidebar-ring: oklch(0.62 0.12 165);
+  --sidebar: oklch(0.16 0.008 168);
+  --sidebar-foreground: oklch(0.958 0.005 160);
+  --sidebar-primary: oklch(0.8 0.172 160);
+  --sidebar-primary-foreground: oklch(0.16 0.05 165);
+  --sidebar-accent: oklch(0.262 0.028 164);
+  --sidebar-accent-foreground: oklch(0.878 0.085 162);
+  --sidebar-border: oklch(1 0 0 / 8.5%);
+  --sidebar-ring: oklch(0.62 0.128 162);
+
+  /* Ambient layers — alive at night */
+  --glow: oklch(0.8 0.172 160 / 0.38);
+  --aurora-1: oklch(0.58 0.17 163 / 0.3);
+  --aurora-2: oklch(0.52 0.13 215 / 0.24);
+  --aurora-3: oklch(0.72 0.14 85 / 0.13);
+  --noise-opacity: 0.05;
 }
 
 @layer base {
@@ -140,9 +163,17 @@
     @apply bg-background text-foreground;
     font-feature-settings: 'cv11', 'ss01';
   }
-  /* Restrained default heading treatment */
   h1, h2, h3, h4 {
     @apply tracking-tight;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 26%, transparent);
+  }
+  /* Tactile press feedback on every control */
+  button:active:not(:disabled),
+  [role='button']:active:not(:disabled),
+  [role='menuitem']:active:not(:disabled) {
+    transform: scale(0.97);
   }
 }
 
@@ -176,7 +207,180 @@
   background: transparent;
 }
 
-/* A4 print layout: only the active print sheet is visible */
+/* ── Ambient background ─────────────────────────────────────── */
+
+/* Slowly drifting aurora blobs behind the app. Pure transform
+   animation on one fixed, composited layer — cheap on the GPU. */
+.aurora {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+}
+.aurora::before,
+.aurora::after,
+.aurora > span {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  will-change: transform;
+}
+.aurora::before {
+  content: '';
+  width: 58vw;
+  height: 58vw;
+  top: -22%;
+  left: -14%;
+  background: var(--aurora-1);
+  animation: aurora-drift-a 46s ease-in-out infinite alternate;
+}
+.aurora::after {
+  content: '';
+  width: 50vw;
+  height: 50vw;
+  bottom: -20%;
+  right: -12%;
+  background: var(--aurora-2);
+  animation: aurora-drift-b 58s ease-in-out infinite alternate;
+}
+.aurora > span {
+  width: 36vw;
+  height: 36vw;
+  top: 32%;
+  left: 44%;
+  background: var(--aurora-3);
+  animation: aurora-drift-c 40s ease-in-out infinite alternate;
+}
+@keyframes aurora-drift-a {
+  from { transform: translate3d(-6%, -4%, 0) scale(1); }
+  to { transform: translate3d(11%, 9%, 0) scale(1.18); }
+}
+@keyframes aurora-drift-b {
+  from { transform: translate3d(5%, 6%, 0) scale(1.12); }
+  to { transform: translate3d(-9%, -8%, 0) scale(0.94); }
+}
+@keyframes aurora-drift-c {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(-13%, 11%, 0) scale(1.24); }
+}
+
+/* Fine film grain — kills the "flat AI gradient" look */
+.noise {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: var(--noise-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora::before,
+  .aurora::after,
+  .aurora > span {
+    animation: none;
+  }
+  button:active:not(:disabled),
+  [role='button']:active:not(:disabled),
+  [role='menuitem']:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* ── Depth & light ──────────────────────────────────────────── */
+
+/* Translucent chrome (sidebar) floating over the aurora */
+.glass {
+  background: color-mix(in oklab, var(--sidebar) 62%, transparent);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+}
+.dark .glass {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
+}
+/* Translucent bars (mobile header / bottom tabs) */
+.glass-bar {
+  background: color-mix(in oklab, var(--background) 68%, transparent);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+}
+
+/* Soft primary glow for the main action */
+.shadow-glow {
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.1),
+    0 10px 30px -10px var(--glow);
+}
+
+/* Hover lift for interactive surfaces */
+.lift {
+  transition:
+    transform 0.35s var(--ease-out-expo),
+    box-shadow 0.35s var(--ease-out-expo),
+    border-color 0.35s var(--ease-out-expo);
+}
+.lift:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.05),
+    0 16px 36px -18px oklch(0 0 0 / 0.22);
+}
+
+/* Light sweep across primary buttons on hover */
+.sheen {
+  position: relative;
+  overflow: hidden;
+}
+.sheen::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  background: linear-gradient(105deg, transparent 42%, oklch(1 0 0 / 0.24) 50%, transparent 58%);
+  transform: translateX(-130%);
+  transition: transform 0.8s var(--ease-out-expo);
+  pointer-events: none;
+}
+.sheen:hover::after {
+  transform: translateX(130%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheen::after {
+    display: none;
+  }
+}
+
+/* Emerald→teal gradient text — brand moments only */
+.text-shine {
+  background: linear-gradient(118deg, var(--primary) 20%, oklch(0.78 0.11 195));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Springy entrance for every popup surface (dialogs, menus, sheets) */
+[data-slot='dialog-content'],
+[data-slot='alert-dialog-content'],
+[data-slot='sheet-content'],
+[data-slot='dropdown-menu-content'],
+[data-slot='popover-content'],
+[data-slot='select-content'],
+[data-slot='tooltip-content'] {
+  transition-timing-function: var(--ease-spring);
+}
+
+/* ── A4 print layout ────────────────────────────────────────── */
+
+/* The print sheet root is hidden on screen; when the store opens a
+   print it adds .tourny-printing to <html>, which isolates the sheet
+   as the only visible body child. Stray portals (dropdowns, dialogs,
+   toasts) can therefore never leak into a printout. */
+@media screen {
+  #tourny-print-root {
+    display: none;
+  }
+}
 @media print {
   @page {
     size: A4;
@@ -186,6 +390,12 @@
   body {
     background: #fff !important;
     color: #000 !important;
+  }
+  html.tourny-printing body > *:not(#tourny-print-root) {
+    display: none !important;
+  }
+  html.tourny-printing #tourny-print-root {
+    display: block !important;
   }
   .print-p {
     padding: 0 !important;

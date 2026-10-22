@@ -697,8 +697,146 @@ async function main() {
     ok('account listing works', Array.isArray(selfList.data?.users) && selfList.data.users.length >= 2)
   }
 
-  // ═══ 15. Sign out & cleanup ═══
-  section('15 · Sign out & cleanup')
+  // ═══ 15. Invitation codes ═══
+  section('15 · Invitation codes')
+  const redeemedUserIds: string[] = []
+  {
+    // role guards
+    const guestList = await guest.call('GET', '/api/admin/invites')
+    ok('guest cannot list invitation codes', guestList.status === 401, guestList.status)
+    const judgeList = await judge.call('GET', '/api/admin/invites')
+    ok('scorekeeper cannot list invitation codes', judgeList.status === 403, judgeList.status)
+    const judgeCreate = await judge.call('POST', '/api/admin/invites', { role: 'judge' })
+    ok('scorekeeper cannot generate codes', judgeCreate.status === 403, judgeCreate.status)
+
+    // generation
+    const gen1 = await admin.call('POST', '/api/admin/invites', { role: 'judge', expiresInDays: 7 })
+    ok('generates a scorekeeper code', gen1.status === 201 && gen1.data?.invite?.code?.length === 8, gen1)
+    ok('code role + creator recorded', gen1.data?.invite?.role === 'judge' && typeof gen1.data?.invite?.createdBy === 'string', gen1.data?.invite)
+    const code1 = gen1.data?.invite?.code as string
+
+    const gen2 = await admin.call('POST', '/api/admin/invites', { role: 'admin' })
+    ok('generates an administrator code without expiry', gen2.status === 201 && gen2.data?.invite?.expiresAt === null, gen2)
+    const code2 = gen2.data?.invite?.code as string
+
+    const gen3 = await admin.call('POST', '/api/admin/invites', { role: 'judge', expiresInDays: -1 })
+    ok('generates an already-expired code for testing', gen3.status === 201, gen3.status)
+    const code3 = gen3.data?.invite?.code as string
+    const code3Id = gen3.data?.invite?.id as string
+
+    const list = await admin.call('GET', '/api/admin/invites')
+    const codes = (list.data?.invites ?? []).map((i: any) => i.code)
+    ok('lists all generated codes', list.status === 200 && codes.includes(code1) && codes.includes(code2), codes.length)
+
+    // redemption validation
+    const badCode = await new Client().call('POST', '/api/auth/redeem', {
+      code: 'ZZZZZZ99',
+      name: 'Nobody',
+      email: 'nobody@tourny.test',
+      password: 'a good pass 123',
+    })
+    ok('rejects unknown code', badCode.status === 400, badCode.status)
+
+    const weakPw = await new Client().call('POST', '/api/auth/redeem', {
+      code: code1,
+      name: 'Invited Judge',
+      email: 'invited.judge@tourny.test',
+      password: 'short',
+    })
+    ok('rejects weak password on redemption', weakPw.status === 400, weakPw.status)
+
+    const badEmail = await new Client().call('POST', '/api/auth/redeem', {
+      code: code1,
+      name: 'Invited Judge',
+      email: 'not-an-email',
+      password: 'a good pass 123',
+    })
+    ok('rejects invalid email on redemption', badEmail.status === 400, badEmail.status)
+
+    // successful redemption (typed with dashes + lowercase to prove normalization)
+    const redeemer = new Client()
+    const redeem = await redeemer.call('POST', '/api/auth/redeem', {
+      code: `${code1.slice(0, 4)}-${code1.slice(4)}`.toLowerCase(),
+      name: 'Invited Judge',
+      email: 'invited.judge@tourny.test',
+      password: 'a good pass 123',
+    })
+    ok('redeems the code and creates the account', redeem.status === 201 && redeem.data?.user?.role === 'judge', redeem)
+    ok('redemption signs the new user in', typeof redeem.data?.user?.id === 'string', redeem.data?.user)
+    if (redeem.data?.user?.id) redeemedUserIds.push(redeem.data.user.id)
+
+    const sessionCheck = await redeemer.call('GET', '/api/auth/session')
+    ok('redeemed user has a live session', sessionCheck.data?.user?.email === 'invited.judge@tourny.test', sessionCheck.data)
+
+    const redeemAgain = await new Client().call('POST', '/api/auth/redeem', {
+      code: code1,
+      name: 'Second Person',
+      email: 'second.person@tourny.test',
+      password: 'a good pass 123',
+    })
+    ok('code is single-use', redeemAgain.status === 400, redeemAgain.status)
+
+    const dupEmail = await new Client().call('POST', '/api/auth/redeem', {
+      code: code2,
+      name: 'Clone Judge',
+      email: 'invited.judge@tourny.test',
+      password: 'a good pass 123',
+    })
+    ok('rejects duplicate email on redemption', dupEmail.status === 400, dupEmail.status)
+
+    const expired = await new Client().call('POST', '/api/auth/redeem', {
+      code: code3,
+      name: 'Late Judge',
+      email: 'late.judge@tourny.test',
+      password: 'a good pass 123',
+    })
+    ok('rejects expired code', expired.status === 400, expired.status)
+
+    // redeemed user can sign in normally afterwards
+    const relogin = await new Client().call('POST', '/api/auth/login', {
+      email: 'invited.judge@tourny.test',
+      password: 'a good pass 123',
+    })
+    ok('redeemed account signs in normally', relogin.status === 200 && relogin.data?.user?.role === 'judge', relogin.status)
+
+    // admin-role code grants admin
+    const adminRedeem = await new Client().call('POST', '/api/auth/redeem', {
+      code: code2,
+      name: 'Invited Admin',
+      email: 'invited.admin@tourny.test',
+      password: 'a good pass 123',
+    })
+    ok('administrator code grants the admin role', adminRedeem.status === 201 && adminRedeem.data?.user?.role === 'admin', adminRedeem)
+    if (adminRedeem.data?.user?.id) redeemedUserIds.push(adminRedeem.data.user.id)
+
+    // list reflects usage
+    const listAfter = await admin.call('GET', '/api/admin/invites')
+    const usedInvite = (listAfter.data?.invites ?? []).find((i: any) => i.code === code1)
+    ok('used code shows the redeemer', usedInvite?.usedAt && usedInvite?.usedByName === 'Invited Judge', usedInvite)
+
+    // deletion
+    const del = await admin.call('DELETE', `/api/admin/invites/${code3Id}`)
+    ok('deletes a code', del.status === 200, del.status)
+    const delAgain = await admin.call('DELETE', `/api/admin/invites/${code3Id}`)
+    ok('deleting a missing code returns 404', delAgain.status === 404, delAgain.status)
+    const listFinal = await admin.call('GET', '/api/admin/invites')
+    const finalCodes = (listFinal.data?.invites ?? []).map((i: any) => i.code)
+    ok('deleted code no longer listed', !finalCodes.includes(code3), finalCodes.includes(code3))
+
+    // cleanup — remove redeemed test users and leftover codes
+    for (const uid of redeemedUserIds) {
+      await admin.call('DELETE', `/api/admin/users/${uid}`)
+    }
+    const cleanupList = await admin.call('GET', '/api/admin/invites')
+    for (const invite of cleanupList.data?.invites ?? []) {
+      await admin.call('DELETE', `/api/admin/invites/${invite.id}`)
+    }
+    const finalCheck = await admin.call('GET', '/api/admin/invites')
+    ok('battle-test codes cleaned up', (finalCheck.data?.invites ?? []).length === 0, finalCheck.data?.invites?.length)
+  }
+
+  // ═══ 16. Sign out & cleanup ═══
+  section('16 · Sign out & cleanup')
   {
     const out = await judge.call('POST', '/api/auth/logout')
     ok('signs out', out.status === 200, out)

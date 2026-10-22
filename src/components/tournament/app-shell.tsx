@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { useTheme } from 'next-themes'
+import { motion } from 'framer-motion'
 import {
   ChevronDown,
   ClipboardCheck,
@@ -34,9 +35,10 @@ import { cn } from '@/lib/utils'
 import type { TournamentStatus, TournamentSummaryDTO } from '@/lib/types'
 
 /*
- * Application shell — a quiet, Linear-style inverted L:
- * desktop sidebar for navigation, mobile top bar + bottom tabs.
- * Chrome stays out of the way; content does the talking.
+ * Application shell — a quiet, Linear-style inverted L with depth:
+ * translucent glass chrome floating over a slow aurora, a spring-
+ * animated nav indicator and per-view entrance motion. Content stays
+ * the hero; chrome stays out of the way.
  */
 
 interface NavItem {
@@ -106,13 +108,19 @@ export function AppShell({ children }: { children: ReactNode }) {
       .toUpperCase()
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
+      {/* Ambient background — slow aurora + film grain */}
+      <div className="aurora print:hidden" aria-hidden>
+        <span />
+      </div>
+      <div className="noise print:hidden" aria-hidden />
+
       {/* ── Desktop sidebar ─────────────────────────────────────── */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r bg-sidebar lg:flex print:hidden">
+      <aside className="glass fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r lg:flex print:hidden">
         {/* Brand */}
         <div className="flex h-14 shrink-0 items-center gap-2.5 px-4">
           <img src="/logo.svg" alt="" className="h-6 w-6 rounded-md" width={24} height={24} />
-          <span className="text-[15px] font-semibold tracking-tight">Tourny&nbsp;Lite</span>
+          <span className="text-shine text-[15px] font-semibold tracking-tight">Tourny&nbsp;Lite</span>
         </div>
 
         {/* Tournament switcher */}
@@ -183,7 +191,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       {/* ── Mobile top bar ──────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b bg-background/90 px-4 backdrop-blur lg:hidden print:hidden">
+      <header className="glass-bar sticky top-0 z-40 flex h-14 items-center gap-2 border-b px-4 lg:hidden print:hidden">
         <button
           type="button"
           onClick={() => (hasTournament ? closeTournament() : undefined)}
@@ -222,13 +230,22 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
 
       {/* ── Content ─────────────────────────────────────────────── */}
-      <div className="lg:pl-60">
-        <main className="pb-24 lg:pb-10">{children}</main>
+      <div className="relative z-10 lg:pl-60">
+        <main className="pb-24 lg:pb-10">
+          <motion.div
+            key={view}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {children}
+          </motion.div>
+        </main>
       </div>
 
       {/* ── Mobile bottom tabs ──────────────────────────────────── */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden print:hidden"
+        className="glass-bar fixed inset-x-0 bottom-0 z-40 flex border-t pb-[env(safe-area-inset-bottom)] lg:hidden print:hidden"
         aria-label="Primary"
       >
         <TabLink icon={Home} label="Home" active={view === 'home'} onClick={() => go('home')} />
@@ -306,6 +323,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 /* ── Pieces ────────────────────────────────────────────────────── */
 
+const navSpring = { type: 'spring' as const, stiffness: 480, damping: 38 }
+
 function SidebarLink({
   item,
   active,
@@ -322,14 +341,22 @@ function SidebarLink({
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'flex w-full items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] font-medium transition-colors',
+        'relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] font-medium transition-colors',
         active
-          ? 'bg-accent text-accent-foreground'
+          ? 'text-accent-foreground'
           : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
       )}
     >
-      <Icon className="h-4 w-4 shrink-0" aria-hidden />
-      <span className="truncate">{item.label}</span>
+      {active ? (
+        <motion.span
+          layoutId="sidebar-nav-pill"
+          transition={navSpring}
+          className="absolute inset-0 rounded-md bg-accent shadow-xs"
+          aria-hidden
+        />
+      ) : null}
+      <Icon className="relative z-10 h-4 w-4 shrink-0" aria-hidden />
+      <span className="relative z-10 truncate">{item.label}</span>
     </button>
   )
 }
@@ -351,10 +378,18 @@ function TabLink({
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'flex min-h-14 flex-1 flex-col items-center justify-center gap-1 py-1 text-[10px] font-medium transition-colors',
+        'relative flex min-h-14 flex-1 flex-col items-center justify-center gap-1 py-1 text-[10px] font-medium transition-colors',
         active ? 'text-foreground' : 'text-muted-foreground/80'
       )}
     >
+      {active ? (
+        <motion.span
+          layoutId="tab-indicator"
+          transition={navSpring}
+          className="absolute top-0 h-[3px] w-10 rounded-full bg-primary"
+          aria-hidden
+        />
+      ) : null}
       <Icon className="h-[18px] w-[18px]" aria-hidden />
       {label}
     </button>
