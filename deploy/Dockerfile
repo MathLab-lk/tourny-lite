@@ -61,10 +61,11 @@ WORKDIR /app
 # standalone server traces, so the app AND the Prisma CLI both resolve here.
 COPY --from=prod-deps /app/node_modules ./node_modules
 
-# Standalone Next.js server. Next 16 nests the app under a directory named
-# after the package (.next/standalone/tourny-lite/), which we copy intact —
-# its traced node_modules merge over the prod tree. The build script bakes
-# .next/static and public/ into the nested bundle.
+# Standalone Next.js server, normalized to the classic flat layout by
+# scripts/prepare-standalone.mjs (Next 16 otherwise nests it under the app's
+# path relative to the detected workspace root, which varies by environment).
+# Its traced node_modules merge over the prod tree; static + public are baked
+# in by the same script.
 COPY --from=builder /app/.next/standalone ./
 
 # Generated Prisma client + query engine binary — overlaid last so it wins
@@ -75,13 +76,13 @@ COPY --from=builder /app/prisma ./prisma
 
 COPY deploy/docker-entrypoint.sh ./docker-entrypoint.sh
 # Fail the build early, with a clear message, if the standalone entrypoint is
-# not where CMD expects it. The path derives from the "name" field in
-# package.json — update CMD below if the package is renamed.
+# not where CMD expects it (the build script normalizes the bundle so that
+# server.js always sits at the /app root).
 RUN chmod +x ./docker-entrypoint.sh \
   && mkdir -p /app/db \
   && chown -R app:app /app/db \
-  && test -f /app/tourny-lite/server.js \
-  || (echo "ERROR: /app/tourny-lite/server.js not found - standalone layout changed?" && exit 1)
+  && test -f /app/server.js \
+  || (echo "ERROR: /app/server.js not found - standalone normalization failed?" && exit 1)
 
 # Persistent SQLite volume (database + WAL journal files live here)
 VOLUME /app/db
@@ -94,5 +95,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 # Starts as root solely to repair volume ownership, then immediately drops to
 # the unprivileged "app" user (see docker-entrypoint.sh).
 ENTRYPOINT ["./docker-entrypoint.sh"]
-# Next 16 standalone nests the server under the package-name directory
-CMD ["node", "tourny-lite/server.js"]
+CMD ["node", "server.js"]
