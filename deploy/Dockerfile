@@ -23,11 +23,30 @@ RUN bun install --frozen-lockfile
 # Installs the complete dependency tree — including the Prisma CLI and its
 # full toolchain (@prisma/engines, @prisma/config, and friends) — which the
 # entrypoint needs to apply the database schema on startup.
+#
+# Engine bake: the @prisma/engines postinstall downloads the native engine
+# binaries with `failSilent: true` (any failure is swallowed and the install
+# still exits 0), so the freshly installed tree can contain the engine
+# PACKAGES without the engine BINARIES. At container start `prisma db push`
+# would then try to download them at runtime — as the unprivileged app user,
+# into the root-owned node_modules — and crash with:
+#   "Can't write to /app/node_modules/@prisma/engines …"
+# Running the exact schema-apply command ONCE here (as root, with network
+# access) forces the CLI to fetch every engine it will use at runtime into
+# this tree, fails the BUILD loudly if the fetch is impossible, and validates
+# the schema into the bargain. The throwaway probe database is deleted after.
 # ------------------------------------------------------------------------------
 FROM oven/bun:1-alpine AS prod-deps
 WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production
+
+COPY prisma/schema.prisma ./prisma/
+RUN DATABASE_URL="file:/tmp/engine-probe.db" \
+      ./node_modules/.bin/prisma db push --skip-generate --accept-data-loss \
+    && rm -f /tmp/engine-probe.db* \
+    && ls -1 node_modules/@prisma/engines/schema-engine-* \
+    && chmod -R a+rwX node_modules/@prisma/engines
 
 # ------------------------------------------------------------------------------
 # Stage 3: Build the application (Next.js standalone output)
@@ -57,8 +76,9 @@ ENV PORT=8090
 
 WORKDIR /app
 
-# Complete production dependency tree. This is a superset of the modules the
-# standalone server traces, so the app AND the Prisma CLI both resolve here.
+# Complete production dependency tree (with the baked-in Prisma engine
+# binaries). This is a superset of the modules the standalone server traces,
+# so the app AND the Prisma CLI both resolve here.
 COPY --from=prod-deps /app/node_modules ./node_modules
 
 # Standalone Next.js server, normalized to the classic flat layout by

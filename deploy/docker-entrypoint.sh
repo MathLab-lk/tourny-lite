@@ -16,6 +16,15 @@ if [ "$(id -u)" = "0" ]; then
   exec su-exec app:app "$0" "$@"
 fi
 
+echo "[entrypoint] Verifying Prisma toolchain…"
+if ! ls ./node_modules/@prisma/engines/schema-engine-* > /dev/null 2>&1; then
+  echo "[entrypoint] FATAL: the schema engine binary is missing from the image." >&2
+  echo "[entrypoint]        The engine download was skipped or failed during the build" >&2
+  echo "[entrypoint]        (the @prisma/engines postinstall is fail-silent). Rebuild:" >&2
+  echo "[entrypoint]        docker compose -f deploy/docker-compose.yml build --no-cache" >&2
+  exit 1
+fi
+
 echo "[entrypoint] Applying database schema…"
 ./node_modules/.bin/prisma db push --skip-generate --accept-data-loss
 

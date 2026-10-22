@@ -85,6 +85,24 @@ through Cloudflare without WebSocket support (plain HTTP streaming).
 
 ## Troubleshooting
 
+**`Error: Can't write to /app/node_modules/@prisma/engines …` on startup** —
+the Prisma engine *binaries* were missing from the image. The
+`@prisma/engines` postinstall downloads them with `failSilent: true`, so a
+failed (or skipped) download during `bun install --production` still exits 0
+and produces a hollow `@prisma/engines` directory. At startup, `prisma db push`
+then tries to download the engines at runtime — as the unprivileged `app`
+user, into the root-owned `node_modules` — and crash-loops. Fixed in this
+version: the Dockerfile bakes the engines at build time by running a one-shot
+`db push` against a throwaway database inside the `prod-deps` stage (as root,
+with network access), and fails the build loudly if the engines cannot be
+fetched. Rebuild from scratch to pick up the fix:
+
+```bash
+docker compose -f deploy/docker-compose.yml down
+docker compose -f deploy/docker-compose.yml build --no-cache
+docker compose -f deploy/docker-compose.yml up -d
+```
+
 **`Error: Cannot find module '@prisma/engines'` on startup** — the runtime
 image was built without the complete Prisma toolchain. Fixed in this version:
 the Dockerfile now installs production dependencies in a dedicated stage and
