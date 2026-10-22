@@ -83,6 +83,37 @@ through Cloudflare without WebSocket support (plain HTTP streaming).
 6. **Next year**: Home → ⋯ → *Duplicate tournament* — structure copied,
    results cleared.
 
+## Troubleshooting
+
+**`Error: Cannot find module '@prisma/engines'` on startup** — the runtime
+image was built without the complete Prisma toolchain. Fixed in this version:
+the Dockerfile now installs production dependencies in a dedicated stage and
+ships the full tree (`prisma`, `@prisma/engines`, `@prisma/internals`, …)
+alongside the standalone server. Rebuild from scratch to pick up the fix:
+
+```bash
+docker compose -f deploy/docker-compose.yml down
+docker compose -f deploy/docker-compose.yml build --no-cache
+docker compose -f deploy/docker-compose.yml up -d
+```
+
+**A second container appeared (e.g. named "prisma" or a database service)** —
+Tourny Lite ships as **one container by design**. The database is embedded
+SQLite inside the app container; no external database container is needed or
+used. If your deployment platform provisioned an extra database resource,
+remove it — the app never connects to it.
+
+**`unable to open database file`** — the `deploy/data` directory is not
+writable by the container's `app` user. The entrypoint repairs ownership
+automatically on startup; if it persists, check the directory permissions on
+the host (`docker logs tourny-lite` shows the exact error) or delete the
+directory and let Docker recreate it (back it up first — it holds the
+database).
+
+**Container restart-loops after a schema change** — check
+`docker logs tourny-lite` for the Prisma step; the entrypoint applies schema
+changes automatically (idempotent `prisma db push`).
+
 ## Local development
 
 ```bash

@@ -1,0 +1,46 @@
+# ------------------------------------------------------------------------------
+# Tourny Lite — Docker build context exclusions
+# Keeps the image free of local artifacts (dependencies, build output,
+# databases, logs) so the build is reproducible from a fresh checkout.
+# ------------------------------------------------------------------------------
+
+# Dependencies — installed inside the image, never copied from the host
+node_modules
+**/node_modules
+
+# Build output — produced inside the image
+.next
+out
+
+# Local databases & SQLite sidecar files
+db
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Logs
+*.log
+dev.log
+server.log
+
+# Environment files — secrets are injected at runtime, never baked into images
+.env
+.env.*
+!**/.env.example
+
+# Persistent data volume used by docker compose
+deploy/data
+
+# Version control & editor state
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+
+# Local scratch / artifacts
+tool-results
+download
+upload
+tmp
