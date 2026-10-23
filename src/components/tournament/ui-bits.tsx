@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, type ReactNode } from 'react'
-import { animate, useReducedMotion } from 'framer-motion'
+import { animate, motion, useReducedMotion, type Variants } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import type { EventStatus, TournamentStatus } from '@/lib/types'
 
@@ -10,6 +10,61 @@ import type { EventStatus, TournamentStatus } from '@/lib/types'
  * page headers and empty states. Every view imports from here so
  * the whole app speaks the same visual language.
  */
+
+/* ── Motion kit ─────────────────────────────────────────────── */
+
+/*
+ * The app-wide motion vocabulary. Everything that enters, exits
+ * or re-orders uses these tokens so the whole product moves with
+ * one voice: quick, springy, never sluggish.
+ */
+
+/** Silky expo-out — entrances that arrive fast and settle softly. */
+export const easeOutExpo: [number, number, number, number] = [0.16, 1, 0.3, 1]
+
+/** The house spring — a gentle, tactile overshoot. */
+export const springSoft = { type: 'spring' as const, stiffness: 420, damping: 34 }
+
+/** Snappier spring — small controls (pills, chips, icons). */
+export const springPop = { type: 'spring' as const, stiffness: 550, damping: 32 }
+
+/** Parent: reveals children one after another (capped, so long
+ *  lists never keep the user waiting). */
+export const staggerParent: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.045, delayChildren: 0.03 } },
+}
+
+/** Child of staggerParent: a quick fade + rise. */
+export const staggerChild: Variants = {
+  hidden: { opacity: 0, y: 10 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: easeOutExpo } },
+}
+
+/** Single-use entrance: fade + rise. For elements outside a
+ *  stagger group (empty states, panels, fresh cards). */
+export function FadeIn({
+  children,
+  className,
+  delay = 0,
+  y = 10,
+}: {
+  children: ReactNode
+  className?: string
+  delay?: number
+  y?: number
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.38, ease: easeOutExpo, delay }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  )
+}
 
 /* ── Event status ─────────────────────────────────────────────── */
 
@@ -35,7 +90,8 @@ export function eventStatusMeta(status: EventStatus) {
   return EVENT_STATUS_META[status] ?? EVENT_STATUS_META.pending
 }
 
-/** Small status chip used on events, slots and dialogs. */
+/** Small status chip used on events, slots and dialogs. Colors
+ *  morph smoothly when a live update changes a status. */
 export function StatusChip({
   status,
   className,
@@ -47,12 +103,12 @@ export function StatusChip({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium leading-4',
+        'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium leading-4 transition-colors duration-300',
         meta.chip,
         className
       )}
     >
-      <span className={cn('h-1.5 w-1.5 rounded-full', meta.dot)} aria-hidden />
+      <span className={cn('h-1.5 w-1.5 rounded-full transition-colors duration-300', meta.dot)} aria-hidden />
       {meta.label}
     </span>
   )
@@ -98,12 +154,12 @@ export function TournamentStatusChip({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium leading-4',
+        'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium leading-4 transition-colors duration-300',
         meta.chip,
         className
       )}
     >
-      <span className={cn('h-1.5 w-1.5 rounded-full', meta.dot)} aria-hidden />
+      <span className={cn('h-1.5 w-1.5 rounded-full transition-colors duration-300', meta.dot)} aria-hidden />
       {meta.label}
     </span>
   )
@@ -183,7 +239,8 @@ export function PageHeader({
 
 /* ── Empty state ──────────────────────────────────────────────── */
 
-/** Terse, centered empty state with an optional action. */
+/** Terse, centered empty state with an optional action. Rises
+ *  in with the same spring every entrance uses. */
 export function EmptyState({
   title,
   hint,
@@ -196,7 +253,10 @@ export function EmptyState({
   className?: string
 }) {
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 10, scale: 0.99 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={springSoft}
       className={cn(
         'flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-6 py-16 text-center',
         className
@@ -205,13 +265,14 @@ export function EmptyState({
       <p className="text-sm font-medium">{title}</p>
       {hint ? <p className="max-w-sm text-[13px] text-muted-foreground">{hint}</p> : null}
       {action ? <div className="mt-3">{action}</div> : null}
-    </div>
+    </motion.div>
   )
 }
 
 /* ── Stat strip ───────────────────────────────────────────────── */
 
-/** Flat stat row divided by hairlines — no cards, no icon boxes. */
+/** Flat stat row divided by hairlines — no cards, no icon boxes.
+ *  Carries staggerChild so it slots into a view's reveal flow. */
 export function StatStrip({
   items,
   className,
@@ -220,7 +281,8 @@ export function StatStrip({
   className?: string
 }) {
   return (
-    <div
+    <motion.div
+      variants={staggerChild}
       className={cn(
         'lift grid grid-cols-2 divide-border rounded-lg border bg-card shadow-xs sm:grid-cols-4 sm:divide-x',
         className
@@ -233,6 +295,6 @@ export function StatStrip({
           {item.hint ? <div className="mt-1.5">{item.hint}</div> : null}
         </div>
       ))}
-    </div>
+    </motion.div>
   )
 }

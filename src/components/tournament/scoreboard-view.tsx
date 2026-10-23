@@ -179,12 +179,21 @@ export function ScoreboardView() {
                 </tr>
               </thead>
               <tbody>
+                {/* Rows glide when live results re-order the
+                    standings — a rank change is a smooth climb, not
+                    a jump. */}
                 {standings.map((row, i) => (
                   <motion.tr
                     key={row.centerId}
+                    layout="position"
                     initial={{ opacity: 0, x: -18 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.35 + i * 0.07, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                    transition={{
+                      delay: 0.35 + i * 0.07,
+                      duration: 0.5,
+                      ease: [0.16, 1, 0.3, 1],
+                      layout: { type: 'spring', stiffness: 300, damping: 32 },
+                    }}
                     className={cn(
                       'border-b border-white/5 border-l-4 transition-colors last:border-0 hover:bg-zinc-800/40',
                       rankStyle(row.rank)

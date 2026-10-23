@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
 import {
   Award,
   Loader2,
@@ -24,7 +25,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { useIsDesktop } from '@/hooks/use-mobile'
 import { PodiumEditor, type PodiumValue } from '@/components/tournament/podium-editor'
-import { EmptyState, StatusChip, medalText } from '@/components/tournament/ui-bits'
+import { EmptyState, StatusChip, easeOutExpo, medalText, springPop } from '@/components/tournament/ui-bits'
 import { useAppStore } from '@/store/app-store'
 import { cn } from '@/lib/utils'
 import type { EventDTO } from '@/lib/types'
@@ -215,8 +216,13 @@ export function ScoringView() {
   ) : null
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 pt-6 sm:px-6">
-      {/* Divisions */}
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.26, ease: easeOutExpo }}
+      className="mx-auto w-full max-w-5xl px-4 pt-6 sm:px-6"
+    >
+      {/* Divisions — the active pill springs up, colors crossfade */}
       {divisions.length > 0 ? (
         <div className="flex gap-1.5 overflow-x-auto pb-1" role="tablist" aria-label="Divisions">
           {divisions.map((d) => {
@@ -224,12 +230,15 @@ export function ScoringView() {
             const done = divEvents.filter((e) => e.status === 'completed').length
             const active = effectiveDivisionId === d.id
             return (
-              <button
+              <motion.button
                 key={d.id}
                 type="button"
                 role="tab"
                 aria-selected={active}
                 onClick={() => setDivisionId(d.id)}
+                animate={{ scale: active ? 1.04 : 1 }}
+                transition={springPop}
+                whileTap={{ scale: 0.94 }}
                 className={cn(
                   'flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors',
                   active
@@ -241,7 +250,7 @@ export function ScoringView() {
                 <span className={cn('text-xs tabular-nums', active ? 'opacity-80' : 'text-muted-foreground')}>
                   {done}/{divEvents.length}
                 </span>
-              </button>
+              </motion.button>
             )
           })}
         </div>
@@ -253,12 +262,15 @@ export function ScoringView() {
           {gamesInDivision.map((g) => {
             const active = effectiveGameId === g.id
             return (
-              <button
+              <motion.button
                 key={g.id}
                 type="button"
                 role="tab"
                 aria-selected={active}
                 onClick={() => setGameId(g.id)}
+                animate={{ scale: active ? 1.03 : 1 }}
+                transition={springPop}
+                whileTap={{ scale: 0.94 }}
                 className={cn(
                   'shrink-0 rounded-md border px-3 py-1.5 text-[13px] transition-colors',
                   active
@@ -272,7 +284,7 @@ export function ScoringView() {
                     {g.sinhalaName}
                   </span>
                 ) : null}
-              </button>
+              </motion.button>
             )
           })}
         </div>
@@ -295,14 +307,29 @@ export function ScoringView() {
         </div>
       ) : (
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
-          {/* Event slots */}
+          {/* Event slots — re-staggered whenever the division or game changes */}
           <div>
-            <ul className="divide-y overflow-hidden rounded-lg border bg-card">
+            <motion.ul
+              key={`${effectiveDivisionId ?? ''}:${effectiveGameId ?? ''}`}
+              initial="hidden"
+              animate="show"
+              variants={{
+                hidden: {},
+                show: { transition: { staggerChildren: 0.04 } },
+              }}
+              className="divide-y overflow-hidden rounded-lg border bg-card"
+            >
               {slots.map((e) => {
                 const r = e.result
                 const active = eventId === e.id
                 return (
-                  <li key={e.id}>
+                  <motion.li
+                    key={e.id}
+                    variants={{
+                      hidden: { opacity: 0, y: 8 },
+                      show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: easeOutExpo } },
+                    }}
+                  >
                     <button
                       type="button"
                       onClick={() => openEvent(e)}
@@ -314,29 +341,43 @@ export function ScoringView() {
                     >
                       <span className="shrink-0 text-sm font-medium">Event {e.subEventIndex}</span>
                       {r ? (
-                        <span className="flex min-w-0 flex-1 items-center gap-2 text-[13px] font-semibold tabular-nums">
+                        <motion.span
+                          key={`${r.firstPlaceCode ?? ''}/${r.secondPlaceCode ?? ''}/${r.thirdPlaceCode ?? ''}`}
+                          initial={{ opacity: 0, scale: 0.88 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={springPop}
+                          className="flex min-w-0 flex-1 items-center gap-2 text-[13px] font-semibold tabular-nums"
+                        >
                           <span className={cn('truncate', medalText.gold)}>1·{r.firstPlaceCode ?? '—'}</span>
                           <span className={cn('truncate', medalText.silver)}>2·{r.secondPlaceCode ?? '—'}</span>
                           <span className={cn('truncate', medalText.bronze)}>3·{r.thirdPlaceCode ?? '—'}</span>
-                        </span>
+                        </motion.span>
                       ) : (
                         <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
-                          {session ? 'No result yet' : 'No result yet'}
+                          No result yet
                         </span>
                       )}
                       <StatusChip status={e.status} className="shrink-0" />
                     </button>
-                  </li>
+                  </motion.li>
                 )
               })}
-            </ul>
+            </motion.ul>
           </div>
 
-          {/* Record panel — sticky on desktop */}
+          {/* Record panel — sticky on desktop; springs in per event */}
           {isDesktop ? (
             <div className="sticky top-6 self-start">
               {selectedEvent ? (
-                <div className="rounded-lg border bg-card p-5 shadow-sm">{recordPanel}</div>
+                <motion.div
+                  key={selectedEvent.id}
+                  initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.3, ease: easeOutExpo }}
+                  className="rounded-lg border bg-card p-5 shadow-sm"
+                >
+                  {recordPanel}
+                </motion.div>
               ) : (
                 <div className="rounded-lg border border-dashed px-6 py-16 text-center">
                   <p className="text-[13px] text-muted-foreground">
@@ -396,6 +437,6 @@ export function ScoringView() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </motion.div>
   )
 }

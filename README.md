@@ -60,6 +60,16 @@ the sign-in dialog, chooses *Have an invitation code?*, enters the code
 and sets their own name, email and password. Codes are single-use and
 can be deleted at any time.
 
+### Motion
+
+Every state change moves — nothing snaps. The shared motion vocabulary
+lives in `ui-bits.tsx` (spring tokens, stagger variants): views
+crossfade with an exit, lists stagger in and glide when rows are added,
+removed or re-ranked, podium assignments pop with a spring, dialogs and
+sheets slide with an overshoot ease, and live results morph chips and
+count up standings in place. All of it respects
+`prefers-reduced-motion`.
+
 ## Technology
 
 Next.js 16 (App Router, standalone output) · TypeScript · Prisma + SQLite

@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Loader2, Lock, RotateCcw, Save, Undo2 } from 'lucide-react'
 import {
   Dialog,
@@ -13,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
+import { easeOutExpo } from '@/components/tournament/ui-bits'
 import { PodiumEditor, type PodiumValue } from '@/components/tournament/podium-editor'
 import { AuditRow } from '@/components/tournament/manage/audit-row'
 import { StatusChip } from '@/components/tournament/ui-bits'
@@ -186,21 +188,34 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
                 ) : null}
               </div>
 
-              {resetOpen ? (
-                <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3">
-                  <p className="text-sm font-semibold text-destructive">Reset this result?</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    The podium is cleared and the event returns to pending. A justification is required.
-                  </p>
-                  <div className="mt-2 flex gap-2">
-                    <Button size="sm" variant="destructive" className="gap-1.5" onClick={doReset} disabled={busy !== null || !reason.trim()}>
-                      {busy === 'reset' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Undo2 className="h-4 w-4" aria-hidden />}
-                      Confirm reset
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setResetOpen(false)}>Cancel</Button>
-                  </div>
-                </div>
-              ) : null}
+              {/* Reset confirmation — unfolds in place like a
+                  drawer, never snapping open. */}
+              <AnimatePresence initial={false}>
+                {resetOpen ? (
+                  <motion.div
+                    key="reset-confirm"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.28, ease: easeOutExpo }}
+                    className="overflow-hidden"
+                  >
+                    <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3">
+                      <p className="text-sm font-semibold text-destructive">Reset this result?</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        The podium is cleared and the event returns to pending. A justification is required.
+                      </p>
+                      <div className="mt-2 flex gap-2">
+                        <Button size="sm" variant="destructive" className="gap-1.5" onClick={doReset} disabled={busy !== null || !reason.trim()}>
+                          {busy === 'reset' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Undo2 className="h-4 w-4" aria-hidden />}
+                          Confirm reset
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setResetOpen(false)}>Cancel</Button>
+                      </div>
+                    </div>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
             </>
           ) : (
             <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed p-4">

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
 import { Presentation, Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store/app-store'
@@ -13,7 +14,11 @@ import {
   StatStrip,
   TournamentStatusChip,
   AnimatedNumber,
+  easeOutExpo,
   eventStatusMeta,
+  springPop,
+  staggerChild,
+  staggerParent,
 } from '@/components/tournament/ui-bits'
 import { cn } from '@/lib/utils'
 import type { EventDTO } from '@/lib/types'
@@ -73,7 +78,12 @@ export function OverviewView() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 pt-6 sm:px-6">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.26, ease: easeOutExpo }}
+      className="mx-auto w-full max-w-6xl px-4 pt-6 sm:px-6"
+    >
       <PageHeader
         title={
           <span className="flex flex-wrap items-center gap-2.5">
@@ -102,30 +112,33 @@ export function OverviewView() {
         }
       />
 
-      {/* Progress stats */}
-      <StatStrip
-        className="mt-5"
-        items={[
-          {
-            label: 'Completed',
-            value: `${progress.completed}/${progress.total}`,
-            hint: (
-              <span className="block h-1 overflow-hidden rounded-full bg-muted">
-                <span
-                  className="block h-full rounded-full bg-emerald-600/80 transition-all dark:bg-emerald-500/80"
-                  style={{ width: `${progress.percent}%` }}
-                />
-              </span>
-            ),
-          },
-          { label: 'In progress', value: <AnimatedNumber value={progress.inProgress} /> },
-          { label: 'Pending', value: <AnimatedNumber value={progress.pending} /> },
-          { label: 'Centers', value: <AnimatedNumber value={centers.length} /> },
-        ]}
-      />
+      {/* The page reveals as one flowing sequence — stats,
+          matrix, activity — never three hard-cut blocks. */}
+      <motion.div variants={staggerParent} initial="hidden" animate="show">
+        {/* Progress stats */}
+        <StatStrip
+          className="mt-5"
+          items={[
+            {
+              label: 'Completed',
+              value: `${progress.completed}/${progress.total}`,
+              hint: (
+                <span className="block h-1 overflow-hidden rounded-full bg-muted">
+                  <span
+                    className="block h-full rounded-full bg-emerald-600/80 transition-all duration-500 dark:bg-emerald-500/80"
+                    style={{ width: `${progress.percent}%` }}
+                  />
+                </span>
+              ),
+            },
+            { label: 'In progress', value: <AnimatedNumber value={progress.inProgress} /> },
+            { label: 'Pending', value: <AnimatedNumber value={progress.pending} /> },
+            { label: 'Centers', value: <AnimatedNumber value={centers.length} /> },
+          ]}
+        />
 
-      {/* Event matrix */}
-      <section className="mt-7" aria-label="Events">
+        {/* Event matrix */}
+        <motion.section variants={staggerChild} className="mt-7" aria-label="Events">
         <div className="mb-2.5 flex items-center justify-between">
           <h2 className="text-sm font-semibold">Events</h2>
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
@@ -180,7 +193,7 @@ export function OverviewView() {
                                   type="button"
                                   onClick={() => setSelectedEvent(e)}
                                   className={cn(
-                                    'min-h-10 min-w-10 rounded-md px-2 py-1 text-xs font-semibold transition-transform hover:scale-105',
+                                    'min-h-10 min-w-10 rounded-md px-2 py-1 text-xs font-semibold transition duration-300 hover:scale-105',
                                     meta.chip
                                   )}
                                   title={
@@ -193,9 +206,15 @@ export function OverviewView() {
                                 >
                                   {e.subEventIndex}
                                   {e.result ? (
-                                    <span className="block text-[9px] font-medium leading-tight opacity-75 tabular-nums">
+                                    <motion.span
+                                      key={`${e.result.firstPlaceCode ?? ''}/${e.result.secondPlaceCode ?? ''}/${e.result.thirdPlaceCode ?? ''}`}
+                                      initial={{ opacity: 0, scale: 0.7 }}
+                                      animate={{ opacity: 1, scale: 1 }}
+                                      transition={springPop}
+                                      className="block text-[9px] font-medium leading-tight opacity-75 tabular-nums"
+                                    >
                                       {e.result.firstPlaceCode ?? '—'}/{e.result.secondPlaceCode ?? '—'}/{e.result.thirdPlaceCode ?? '—'}
-                                    </span>
+                                    </motion.span>
                                   ) : null}
                                 </button>
                               )
@@ -210,10 +229,10 @@ export function OverviewView() {
             </tbody>
           </table>
         </div>
-      </section>
+        </motion.section>
 
-      {/* Recent activity */}
-      <section className="mt-7" aria-label="Recent activity">
+        {/* Recent activity */}
+        <motion.section variants={staggerChild} className="mt-7" aria-label="Recent activity">
         <div className="mb-2.5 flex items-center justify-between">
           <h2 className="text-sm font-semibold">Recent activity</h2>
           {audit.length > 0 ? (
@@ -235,9 +254,10 @@ export function OverviewView() {
             </ul>
           )}
         </div>
-      </section>
+        </motion.section>
+      </motion.div>
 
       <EventDialog key={liveSelectedEvent?.id ?? 'none'} event={liveSelectedEvent} onClose={() => setSelectedEvent(null)} />
-    </div>
+    </motion.div>
   )
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Check, Copy, Loader2, Plus, Ticket, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -12,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
+import { easeOutExpo, springPop } from '@/components/tournament/ui-bits'
 import { useAppStore } from '@/store/app-store'
 import { cn } from '@/lib/utils'
 import type { InviteDTO } from '@/lib/types'
@@ -149,21 +151,39 @@ export function InvitesPanel() {
         </Button>
       </div>
 
-      {/* Freshly generated code */}
-      {latest ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
-          <Ticket className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-          <span className="font-mono text-lg font-bold tracking-[0.2em]">{formatInviteCode(latest)}</span>
-          <span className="text-xs text-muted-foreground">
-            {role === 'admin' ? 'Administrator' : 'Scorekeeper'} · single use
-            {expiry === 'never' ? '' : ` · ${expiry} day${expiry === '1' ? '' : 's'}`}
-          </span>
-          <Button size="sm" variant="outline" className="ml-auto h-8 gap-1.5" onClick={() => void copyLatest()}>
-            {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}
-            {copied ? 'Copied' : 'Copy'}
-          </Button>
-        </div>
-      ) : null}
+      {/* Freshly generated code — the star moment: springs in,
+          proud and copyable. */}
+      <AnimatePresence initial={false} mode="popLayout">
+        {latest ? (
+          <motion.div
+            key={latest}
+            initial={{ opacity: 0, y: 10, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.97 }}
+            transition={springPop}
+            className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3"
+          >
+            <Ticket className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+            <span className="font-mono text-lg font-bold tracking-[0.2em]">{formatInviteCode(latest)}</span>
+            <span className="text-xs text-muted-foreground">
+              {role === 'admin' ? 'Administrator' : 'Scorekeeper'} · single use
+              {expiry === 'never' ? '' : ` · ${expiry} day${expiry === '1' ? '' : 's'}`}
+            </span>
+            <Button size="sm" variant="outline" className="ml-auto h-8 gap-1.5" onClick={() => void copyLatest()}>
+              <motion.span
+                key={copied ? 'copied' : 'copy'}
+                initial={{ scale: 0.4, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={springPop}
+                className="flex"
+              >
+                {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}
+              </motion.span>
+              {copied ? 'Copied' : 'Copy'}
+            </Button>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       {/* Code list */}
       {loading && invites.length === 0 ? (
@@ -176,11 +196,24 @@ export function InvitesPanel() {
         </p>
       ) : (
         <ul className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
-          {invites.map((invite) => {
-            const status = inviteStatus(invite)
-            const exp = expiryLabel(invite)
-            return (
-              <li key={invite.id} className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2">
+          <AnimatePresence initial={false} mode="popLayout">
+            {invites.map((invite) => {
+              const status = inviteStatus(invite)
+              const exp = expiryLabel(invite)
+              return (
+                <motion.li
+                  key={invite.id}
+                  layout
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96 }}
+                  transition={{
+                    duration: 0.26,
+                    ease: easeOutExpo,
+                    layout: { type: 'spring', stiffness: 320, damping: 34 },
+                  }}
+                  className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2"
+                >
                 <span
                   className={cn(
                     'font-mono text-sm font-semibold tracking-widest',
@@ -210,9 +243,10 @@ export function InvitesPanel() {
                 >
                   <Trash2 className="h-3.5 w-3.5" aria-hidden />
                 </Button>
-              </li>
-            )
-          })}
+                </motion.li>
+              )
+            })}
+          </AnimatePresence>
         </ul>
       )}
     </div>

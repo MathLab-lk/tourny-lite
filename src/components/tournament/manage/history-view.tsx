@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '@/store/app-store'
 import { AuditRow } from '@/components/tournament/manage/audit-row'
-import { EmptyState, PageHeader } from '@/components/tournament/ui-bits'
+import { EmptyState, PageHeader, easeOutExpo } from '@/components/tournament/ui-bits'
 import { cn } from '@/lib/utils'
 
 const FILTERS = [
@@ -53,7 +53,12 @@ export function HistoryView() {
   const entries = filter === 'all' ? audit : audit.filter((a) => a.action === filter)
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 pt-6 sm:px-6">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.26, ease: easeOutExpo }}
+      className="mx-auto w-full max-w-4xl px-4 pt-6 sm:px-6"
+    >
       <PageHeader
         title="History"
         meta="Every result change with its author and justification"
@@ -108,13 +113,19 @@ export function HistoryView() {
             )}
           </div>
         ) : (
-          <ul className="divide-y">
+          <motion.ul
+            key={filter}
+            initial="hidden"
+            animate="show"
+            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.04 } } }}
+            className="divide-y"
+          >
             {entries.map((a) => (
               <AuditRow key={a.id} entry={a} />
             ))}
-          </ul>
+          </motion.ul>
         )}
       </div>
-    </div>
+    </motion.div>
   )
 }

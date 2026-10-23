@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   Check,
   ChevronLeft,
@@ -23,6 +24,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
+import { easeOutExpo, springPop } from '@/components/tournament/ui-bits'
 import { useAppStore } from '@/store/app-store'
 import { MASTER_GAME_LIBRARY, type PresetGame } from '@/lib/preset'
 import type { CustomTournamentPayload } from '@/lib/types'
@@ -62,7 +64,15 @@ export function WizardDialog({ open, onOpenChange }: WizardDialogProps) {
   const openTournament = useAppStore((s) => s.openTournament)
 
   const [step, setStep] = useState(1)
+  const [dir, setDir] = useState(1)
   const [busy, setBusy] = useState(false)
+
+  /** Steps slide in the direction the user travels — forward
+   *  slides left, Back slides right, never a hard cut. */
+  const goStep = (next: number) => {
+    setDir(next > step ? 1 : -1)
+    setStep(next)
+  }
 
   // Step 1
   const [name, setName] = useState('')
@@ -215,21 +225,51 @@ export function WizardDialog({ open, onOpenChange }: WizardDialogProps) {
               <li key={label} className="flex flex-1 items-center gap-2">
                 <span
                   className={cn(
-                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
+                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors duration-300',
                     current && 'bg-primary text-primary-foreground',
                     done && 'bg-emerald-600 text-white',
                     !current && !done && 'bg-muted text-muted-foreground'
                   )}
                   aria-current={current ? 'step' : undefined}
                 >
-                  {done ? <Check className="h-4 w-4" aria-hidden /> : n}
+                  {done ? (
+                    <motion.span
+                      key="check"
+                      initial={{ scale: 0.2, rotate: -90 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={springPop}
+                      className="flex"
+                    >
+                      <Check className="h-4 w-4" aria-hidden />
+                    </motion.span>
+                  ) : (
+                    n
+                  )}
                 </span>
-                <span className={cn('hidden text-xs font-medium sm:block', current ? 'text-foreground' : 'text-muted-foreground')}>{label}</span>
-                {i < STEPS.length - 1 ? <span className="h-px flex-1 bg-border" aria-hidden /> : null}
+                <span className={cn('hidden text-xs font-medium transition-colors sm:block', current ? 'text-foreground' : 'text-muted-foreground')}>{label}</span>
+                {i < STEPS.length - 1 ? (
+                  <motion.span
+                    className="h-px flex-1 origin-left bg-border"
+                    initial={false}
+                    animate={{ scaleX: done ? 1 : 0.35, opacity: done ? 1 : 0.4 }}
+                    transition={{ duration: 0.4, ease: easeOutExpo }}
+                    aria-hidden
+                  />
+                ) : null}
               </li>
             )
           })}
         </ol>
+
+        {/* Steps — slide with the travel direction */}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={step}
+            initial={{ opacity: 0, x: 26 * dir }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -26 * dir }}
+            transition={{ duration: 0.22, ease: easeOutExpo }}
+          >
 
         {/* STEP 1 */}
         {step === 1 ? (
@@ -462,13 +502,15 @@ export function WizardDialog({ open, onOpenChange }: WizardDialogProps) {
             </div>
           </div>
         ) : null}
+          </motion.div>
+        </AnimatePresence>
 
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="ghost" onClick={() => (step === 1 ? onOpenChange(false) : setStep(step - 1))}>
+          <Button variant="ghost" onClick={() => (step === 1 ? onOpenChange(false) : goStep(step - 1))}>
             {step === 1 ? 'Cancel' : (<><ChevronLeft className="mr-1 h-4 w-4" aria-hidden /> Back</>)}
           </Button>
           {step < 3 ? (
-            <Button onClick={() => setStep(step + 1)} disabled={(step === 1 && !step1Valid) || (step === 2 && !step2Valid)}>
+            <Button onClick={() => goStep(step + 1)} disabled={(step === 1 && !step1Valid) || (step === 2 && !step2Valid)}>
               Continue <ChevronRight className="ml-1 h-4 w-4" aria-hidden />
             </Button>
           ) : (

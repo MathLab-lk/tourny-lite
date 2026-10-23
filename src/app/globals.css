@@ -297,6 +297,37 @@
   [role='menuitem']:active:not(:disabled) {
     transform: none;
   }
+  /* Collapse every entrance/exit to a cut — motion-sensitive
+     users get instant, predictable state changes. */
+  .animate-in,
+  .animate-out {
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* Theme icon — the sun/moon spins in as the mode flips. Pure CSS
+   off the .dark class: hydration-safe, no flash of the wrong icon. */
+@keyframes theme-icon-in {
+  from {
+    transform: rotate(-70deg) scale(0.55);
+    opacity: 0;
+  }
+  to {
+    transform: rotate(0deg) scale(1);
+    opacity: 1;
+  }
+}
+.dark .theme-sun {
+  animation: theme-icon-in 0.45s var(--ease-spring);
+}
+html:not(.dark) .theme-moon {
+  animation: theme-icon-in 0.45s var(--ease-spring);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dark .theme-sun,
+  html:not(.dark) .theme-moon {
+    animation: none;
+  }
 }
 
 /* ── Depth & light ──────────────────────────────────────────── */
@@ -378,6 +409,32 @@
 [data-slot='select-content'],
 [data-slot='tooltip-content'] {
   transition-timing-function: var(--ease-spring);
+}
+
+/* Tabs content — a quick fade + rise when a tab panel becomes
+   active. Scoped to data-state because Radix keeps inactive
+   panels mounted (hidden) — the selector newly matching is what
+   (re)starts the animation, exactly like Radix's own
+   data-[state=open]:animate-in pattern. */
+[data-slot='tabs-content'][data-state='active'] {
+  animation-name: tab-panel-in;
+  animation-duration: 0.3s;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes tab-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='tabs-content'] {
+    animation: none;
+  }
 }
 
 /* ── A4 print layout ────────────────────────────────────────── */

@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import { motion } from 'framer-motion'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { springPop } from '@/components/tournament/ui-bits'
 import { cn } from '@/lib/utils'
 import type { CenterDTO } from '@/lib/types'
 
@@ -46,6 +48,43 @@ const SLOT_META: Record<PodiumSlot, { label: string; short: string; active: stri
 
 const ORDER: PodiumSlot[] = ['first', 'second', 'third']
 
+/** The slot's payload: the assigned center code pops in when it
+ *  lands, the hint fades — assignments never hard-swap. */
+function SlotPayload({
+  code,
+  active,
+  disabled,
+}: {
+  code: string | null
+  active: boolean
+  disabled?: boolean
+}) {
+  if (code) {
+    return (
+      <motion.span
+        key={code}
+        initial={{ opacity: 0, scale: 0.55 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={springPop}
+        className="min-w-0 truncate text-base font-semibold leading-tight tabular-nums"
+      >
+        {code}
+      </motion.span>
+    )
+  }
+  return (
+    <motion.span
+      key="hint"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.2 }}
+      className="text-xs text-muted-foreground"
+    >
+      {active && !disabled ? 'Tap a center' : 'Empty'}
+    </motion.span>
+  )
+}
+
 export function PodiumEditor({ centers, points, value, onChange, disabled }: PodiumEditorProps) {
   // Slot the user explicitly selected (overrides auto-advance)
   const [explicitSlot, setExplicitSlot] = useState<PodiumSlot | null>(null)
@@ -85,11 +124,14 @@ export function PodiumEditor({ centers, points, value, onChange, disabled }: Pod
           const center = centerOf(value[slot])
           const isActive = activeSlot === slot
           return (
-            <button
+            <motion.button
               key={slot}
               type="button"
               onClick={() => selectSlot(slot)}
               disabled={disabled}
+              animate={{ scale: isActive ? 1.02 : 1 }}
+              transition={springPop}
+              whileTap={{ scale: 0.97 }}
               className={cn(
                 'relative rounded-lg border p-2.5 text-left transition-all',
                 isActive ? cn(meta.active, 'ring-2') : 'border-border bg-card hover:bg-muted/40',
@@ -102,15 +144,7 @@ export function PodiumEditor({ centers, points, value, onChange, disabled }: Pod
                 <span className="text-[10px] tabular-nums text-muted-foreground">{points[slot]} pts</span>
               </span>
               <span className="mt-1 flex items-center justify-between gap-1">
-                {center ? (
-                  <span className="min-w-0 truncate text-base font-semibold leading-tight tabular-nums">
-                    {center.centerCode}
-                  </span>
-                ) : (
-                  <span className="text-xs text-muted-foreground">
-                    {isActive && !disabled ? 'Tap a center' : 'Empty'}
-                  </span>
-                )}
+                <SlotPayload code={center?.centerCode ?? null} active={isActive} disabled={disabled} />
                 {center && !disabled ? (
                   <span
                     role="button"
@@ -132,7 +166,7 @@ export function PodiumEditor({ centers, points, value, onChange, disabled }: Pod
                   </span>
                 ) : null}
               </span>
-            </button>
+            </motion.button>
           )
         })}
       </div>
@@ -158,7 +192,7 @@ export function PodiumEditor({ centers, points, value, onChange, disabled }: Pod
                 disabled={disabled || !activeSlot || (takenBy !== undefined && !assignedHere)}
                 onClick={() => assign(c.id)}
                 className={cn(
-                  'h-14 flex-col items-center justify-center gap-0.5 text-base font-semibold tabular-nums transition-transform active:scale-95',
+                  'h-14 flex-col items-center justify-center gap-0.5 text-base font-semibold tabular-nums transition-all duration-200',
                   takenBy !== undefined && !assignedHere && 'opacity-40'
                 )}
                 aria-label={`Center ${c.centerCode}${takenBy ? `, already ${takenBy} place` : ''}`}

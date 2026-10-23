@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowRight,
   ChevronRight,
@@ -42,7 +42,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
 import { WizardDialog } from '@/components/tournament/wizard-dialog'
-import { EmptyState, PageHeader, TournamentStatusChip } from '@/components/tournament/ui-bits'
+import { EmptyState, PageHeader, TournamentStatusChip, easeOutExpo } from '@/components/tournament/ui-bits'
 import { useAppStore } from '@/store/app-store'
 import { MATH_COMP_2026_PRESET, countPresetEvents } from '@/lib/preset'
 
@@ -154,20 +154,26 @@ export function HomeView() {
           />
         ) : (
           <ul className="divide-y rounded-lg border bg-card shadow-xs">
-            {tournaments.map((t, i) => {
-              const percent = t.eventCount === 0 ? 0 : Math.round((t.completedCount / t.eventCount) * 100)
-              return (
-                <motion.li
-                  key={t.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{
-                    delay: Math.min(i * 0.045, 0.32),
-                    duration: 0.4,
-                    ease: [0.16, 1, 0.3, 1],
-                  }}
-                  className="group relative flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 sm:gap-4"
-                >
+            {/* Rows stagger in on arrival, glide aside when one is
+                deleted — the list never jumps. */}
+            <AnimatePresence>
+              {tournaments.map((t, i) => {
+                const percent = t.eventCount === 0 ? 0 : Math.round((t.completedCount / t.eventCount) * 100)
+                return (
+                  <motion.li
+                    key={t.id}
+                    layout
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, x: -28 }}
+                    transition={{
+                      delay: Math.min(i * 0.045, 0.32),
+                      duration: 0.4,
+                      ease: easeOutExpo,
+                      layout: { type: 'spring', stiffness: 320, damping: 34 },
+                    }}
+                    className="group relative flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 sm:gap-4"
+                  >
                   <button
                     type="button"
                     onClick={() => openRow(t.id)}
@@ -232,9 +238,10 @@ export function HomeView() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   ) : null}
-                </motion.li>
-              )
-            })}
+                  </motion.li>
+                )
+              })}
+            </AnimatePresence>
           </ul>
         )}
       </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowLeft, Eye, EyeOff, Loader2, LogIn, ShieldCheck, Ticket } from 'lucide-react'
 import {
   Dialog,
@@ -12,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { easeOutExpo, springSoft } from '@/components/tournament/ui-bits'
 import { useAppStore } from '@/store/app-store'
 
 type Mode = 'signin' | 'redeem'
@@ -114,7 +116,19 @@ export function AuthDialog() {
         </DialogHeader>
 
         <form className="space-y-4" onSubmit={submit}>
-          {mode === 'redeem' ? (
+          {/* Sign in ↔ join: the form slides with the travel
+              direction, so switching modes feels like moving
+              between two adjacent places. */}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={isSetup ? 'setup' : mode}
+              initial={{ opacity: 0, x: isSetup || mode === 'redeem' ? 22 : -22 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: isSetup || mode === 'redeem' ? -22 : 22 }}
+              transition={{ duration: 0.2, ease: easeOutExpo }}
+              className="space-y-4"
+            >
+              {mode === 'redeem' ? (
             <div className="space-y-1.5">
               <Label htmlFor="auth-code">Invitation code</Label>
               <Input
@@ -195,11 +209,20 @@ export function AuthDialog() {
               />
             </div>
           ) : null}
+            </motion.div>
+          </AnimatePresence>
 
           {error ? (
-            <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+            <motion.p
+              key={error}
+              initial={{ opacity: 0, y: -6, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={springSoft}
+              className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              role="alert"
+            >
               {error}
-            </p>
+            </motion.p>
           ) : null}
 
           <Button type="submit" className="w-full font-semibold" disabled={busy || !canSubmit}>

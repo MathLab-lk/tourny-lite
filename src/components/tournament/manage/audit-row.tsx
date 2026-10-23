@@ -1,11 +1,16 @@
 'use client'
 
+import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
+import { staggerChild } from '@/components/tournament/ui-bits'
 import type { AuditEntryDTO } from '@/lib/types'
 
 /*
  * Shared audit row — used by the History view and the Overview
  * activity feed. One rendering of the same data, everywhere.
+ *  Carries staggerChild, so it staggers inside any stagger
+ *  parent (History's list) and rides its parent's reveal
+ *  elsewhere (Overview, dialogs).
  */
 
 const ACTION_META: Record<string, { label: string; chip: string }> = {
@@ -27,7 +32,10 @@ export function parsePodium(json: string): string {
 export function AuditRow({ entry, dense }: { entry: AuditEntryDTO; dense?: boolean }) {
   const meta = ACTION_META[entry.action] ?? { label: entry.action, chip: 'bg-muted text-muted-foreground' }
   return (
-    <li className={cn('flex flex-col gap-1 px-4 sm:flex-row sm:items-center sm:gap-3', dense ? 'py-2.5' : 'py-3')}>
+    <motion.li
+      variants={staggerChild}
+      className={cn('flex flex-col gap-1 px-4 sm:flex-row sm:items-center sm:gap-3', dense ? 'py-2.5' : 'py-3')}
+    >
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
         <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium', meta.chip)}>
           {meta.label}
@@ -60,6 +68,6 @@ export function AuditRow({ entry, dense }: { entry: AuditEntryDTO; dense?: boole
       {entry.reason && !dense ? (
         <p className="w-full text-xs italic text-muted-foreground">“{entry.reason}”</p>
       ) : null}
-    </li>
+    </motion.li>
   )
 }

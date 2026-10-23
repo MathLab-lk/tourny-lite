@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { useTheme } from 'next-themes'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   ChevronDown,
   ChevronLeft,
@@ -30,7 +30,13 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useAppStore, type View } from '@/store/app-store'
-import { tournamentStatusMeta } from '@/components/tournament/ui-bits'
+import {
+  easeOutExpo,
+  springPop,
+  staggerChild,
+  staggerParent,
+  tournamentStatusMeta,
+} from '@/components/tournament/ui-bits'
 import { cn } from '@/lib/utils'
 import type { TournamentStatus, TournamentSummaryDTO } from '@/lib/types'
 
@@ -99,8 +105,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
       aria-label="Toggle light or dark theme"
     >
-      <Sun className="hidden h-4 w-4 dark:block" aria-hidden />
-      <Moon className="block h-4 w-4 dark:hidden" aria-hidden />
+      <Sun className="theme-sun hidden h-4 w-4 dark:block" aria-hidden />
+      <Moon className="theme-moon block h-4 w-4 dark:hidden" aria-hidden />
     </Button>
   )
 
@@ -138,40 +144,55 @@ export function AppShell({ children }: { children: ReactNode }) {
           />
         </div>
 
-        {/* Navigation — primary destinations */}
-        {hasTournament ? (
-          <>
-            <nav className="flex flex-col gap-0.5 px-3 pt-4" aria-label="Tournament views">
-              {PRIMARY_NAV.map((item) => (
-                <SidebarLink
-                  key={item.key}
-                  item={item}
-                  active={view === item.key}
-                  onClick={() => setView(item.key)}
-                />
-              ))}
-            </nav>
+        {/* Navigation — unfolds with the tournament, stows away on exit */}
+        <AnimatePresence initial={false}>
+          {hasTournament ? (
+            <motion.div
+              key="tourny-nav"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.34, ease: easeOutExpo }}
+              className="overflow-hidden"
+            >
+              <motion.nav
+                variants={staggerParent}
+                initial="hidden"
+                animate="show"
+                className="flex flex-col gap-0.5 px-3 pt-4"
+                aria-label="Tournament views"
+              >
+                {PRIMARY_NAV.map((item) => (
+                  <SidebarLink
+                    key={item.key}
+                    item={item}
+                    active={view === item.key}
+                    onClick={() => setView(item.key)}
+                  />
+                ))}
+              </motion.nav>
 
-            {/* Manage — occasional, admin-leaning work */}
-            {manageItems.length > 0 ? (
-              <div className="px-3 pt-5">
-                <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                  Manage
-                </p>
-                <nav className="flex flex-col gap-0.5" aria-label="Manage">
-                  {manageItems.map((item) => (
-                    <SidebarLink
-                      key={item.key}
-                      item={item}
-                      active={view === item.key}
-                      onClick={() => setView(item.key)}
-                    />
-                  ))}
-                </nav>
-              </div>
-            ) : null}
-          </>
-        ) : null}
+              {/* Manage — occasional, admin-leaning work */}
+              {manageItems.length > 0 ? (
+                <div className="px-3 pt-5">
+                  <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                    Manage
+                  </p>
+                  <nav className="flex flex-col gap-0.5" aria-label="Manage">
+                    {manageItems.map((item) => (
+                      <SidebarLink
+                        key={item.key}
+                        item={item}
+                        active={view === item.key}
+                        onClick={() => setView(item.key)}
+                      />
+                    ))}
+                  </nav>
+                </div>
+              ) : null}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
         <div className="flex-1" />
 
@@ -221,21 +242,51 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* ── Mobile top bar ──────────────────────────────────────── */}
       <header className="glass-bar sticky top-0 z-40 flex h-14 items-center gap-1 border-b px-3 lg:hidden print:hidden">
-        {hasTournament ? (
-          <button
-            type="button"
-            onClick={closeTournament}
-            className="-ml-1 flex h-10 shrink-0 items-center gap-0.5 rounded-lg pl-1.5 pr-2 text-[15px] text-primary transition-opacity hover:opacity-70"
-            aria-label="Back to tournaments"
-          >
-            <ChevronLeft className="h-5 w-5" aria-hidden />
-            <span className="font-medium">Tournaments</span>
-          </button>
-        ) : (
-          <img src="/logo.svg" alt="" className="ml-1 h-6 w-6 shrink-0 rounded-md" width={24} height={24} />
-        )}
+        <AnimatePresence initial={false} mode="popLayout">
+          {hasTournament ? (
+            <motion.button
+              key="back"
+              type="button"
+              onClick={closeTournament}
+              initial={{ opacity: 0, x: -14 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -14 }}
+              transition={springPop}
+              whileTap={{ scale: 0.96 }}
+              className="-ml-1 flex h-10 shrink-0 items-center gap-0.5 rounded-lg pl-1.5 pr-2 text-[15px] text-primary"
+              aria-label="Back to tournaments"
+            >
+              <ChevronLeft className="h-5 w-5" aria-hidden />
+              <span className="font-medium">Tournaments</span>
+            </motion.button>
+          ) : (
+            <motion.img
+              key="logo"
+              src="/logo.svg"
+              alt=""
+              width={24}
+              height={24}
+              initial={{ opacity: 0, scale: 0.5 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.5 }}
+              transition={springPop}
+              className="ml-1 h-6 w-6 shrink-0 rounded-md"
+            />
+          )}
+        </AnimatePresence>
         <span className="min-w-0 flex-1 truncate text-center text-[15px] font-semibold tracking-tight">
-          {hasTournament ? (activeTournament?.name ?? '') : 'Tourny Lite'}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span
+              key={hasTournament ? (activeTournament?.name ?? '') : 'Tourny Lite'}
+              initial={{ opacity: 0, y: 7 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -7 }}
+              transition={{ duration: 0.18, ease: easeOutExpo }}
+              className="block"
+            >
+              {hasTournament ? (activeTournament?.name ?? '') : 'Tourny Lite'}
+            </motion.span>
+          </AnimatePresence>
         </span>
         {hasTournament ? <SyncStatus compact /> : null}
         {themeToggle}
@@ -266,14 +317,19 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* ── Content ─────────────────────────────────────────────── */}
       <div className="relative z-10 lg:pl-60">
         <main className="pb-24 lg:pb-10">
-          <motion.div
-            key={view}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          >
-            {children}
-          </motion.div>
+          {/* Views crossfade: the outgoing page lifts away before the
+              next one rises in — no hard cuts anywhere in the app. */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={view}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.16, ease: easeOutExpo }}
+            >
+              {children}
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
 
@@ -283,12 +339,28 @@ export function AppShell({ children }: { children: ReactNode }) {
         aria-label="Primary"
       >
         <TabLink icon={Home} label="Home" active={view === 'home'} onClick={() => go('home')} />
-        {hasTournament ? (
-          <>
-            <TabLink icon={LayoutDashboard} label="Overview" active={view === 'overview'} onClick={() => go('overview')} />
-            <TabLink icon={ClipboardCheck} label="Scoring" active={view === 'scoring'} onClick={() => go('scoring')} />
-          </>
-        ) : null}
+        {/* Tabs slide in beside Home when a tournament opens, and
+            fold away cleanly when it closes. */}
+        <AnimatePresence initial={false} mode="popLayout">
+          {hasTournament ? (
+            <TabLink
+              key="overview"
+              icon={LayoutDashboard}
+              label="Overview"
+              active={view === 'overview'}
+              onClick={() => go('overview')}
+            />
+          ) : null}
+          {hasTournament ? (
+            <TabLink
+              key="scoring"
+              icon={ClipboardCheck}
+              label="Scoring"
+              active={view === 'scoring'}
+              onClick={() => go('scoring')}
+            />
+          ) : null}
+        </AnimatePresence>
         <TabLink icon={Ellipsis} label="More" active={moreOpen} onClick={() => setMoreOpen(true)} />
       </nav>
 
@@ -302,7 +374,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           <SheetHeader className="px-2 text-left">
             <SheetTitle className="text-sm">More</SheetTitle>
           </SheetHeader>
-          <div className="mt-1 grid gap-0.5">
+          <motion.div
+            variants={staggerParent}
+            initial="hidden"
+            animate="show"
+            className="mt-1 grid gap-0.5"
+          >
             {hasTournament ? (
               <>
                 <SheetLink icon={History} label="History" onClick={() => go('history')} />
@@ -341,7 +418,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 }}
               />
             )}
-          </div>
+          </motion.div>
           <Button
             variant="outline"
             className="mt-2 h-11 w-full text-[15px] font-semibold"
@@ -370,9 +447,11 @@ function SidebarLink({
 }) {
   const Icon = item.icon
   return (
-    <button
+    <motion.button
       type="button"
+      variants={staggerChild}
       onClick={onClick}
+      whileTap={{ scale: 0.97 }}
       aria-current={active ? 'page' : undefined}
       className={cn(
         'relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] font-medium transition-colors',
@@ -391,11 +470,13 @@ function SidebarLink({
       ) : null}
       <Icon className="relative z-10 h-4 w-4 shrink-0" aria-hidden />
       <span className="relative z-10 truncate">{item.label}</span>
-    </button>
+    </motion.button>
   )
 }
 
-/** iOS-style tab: color emphasis + a gentle icon bounce on activation. */
+/** iOS-style tab: color emphasis + a gentle icon bounce on
+ *  activation. Lays out, so tabs glide aside as siblings appear
+ *  or leave the bar. */
 function TabLink({
   icon: Icon,
   label,
@@ -408,9 +489,15 @@ function TabLink({
   onClick: () => void
 }) {
   return (
-    <button
+    <motion.button
       type="button"
+      layout
       onClick={onClick}
+      initial={{ opacity: 0, scale: 0.55 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.55 }}
+      transition={springPop}
+      whileTap={{ scale: 0.9 }}
       aria-current={active ? 'page' : undefined}
       className={cn(
         'relative flex min-h-14 flex-1 flex-col items-center justify-center gap-1 py-1 text-[10px] font-medium transition-colors',
@@ -425,7 +512,7 @@ function TabLink({
         <Icon className="h-[22px] w-[22px]" aria-hidden />
       </motion.span>
       {label}
-    </button>
+    </motion.button>
   )
 }
 
@@ -441,8 +528,10 @@ function SheetLink({
   destructive?: boolean
 }) {
   return (
-    <button
+    <motion.button
       type="button"
+      variants={staggerChild}
+      whileTap={{ scale: 0.98 }}
       onClick={onClick}
       className={cn(
         'flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-left text-[15px] font-medium transition-colors hover:bg-muted/60',
@@ -451,7 +540,7 @@ function SheetLink({
     >
       <Icon className="h-[18px] w-[18px]" aria-hidden />
       {label}
-    </button>
+    </motion.button>
   )
 }
 
@@ -531,7 +620,8 @@ function TournamentSwitcher({
   )
 }
 
-/** Live / offline / pending-sync indicator. Shows nothing when all is well. */
+/** Live / offline / pending-sync indicator. Shows nothing when all is well.
+ *  State changes pop in and out — never a hard swap. */
 function SyncStatus({ compact }: { compact?: boolean }) {
   const [queueCount, setQueueCount] = useState(0)
   const online = useAppStore((s) => s.online)
@@ -550,37 +640,66 @@ function SyncStatus({ compact }: { compact?: boolean }) {
     }
   }, [activeId, getQueueCount])
 
-  if (!online) {
-    return (
-      <span className="flex shrink-0 items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-[11px] font-medium text-destructive">
-        <span className="h-1.5 w-1.5 rounded-full bg-destructive" aria-hidden />
-        Offline
-      </span>
-    )
-  }
-  if (queueCount > 0) {
-    return (
-      <button
-        type="button"
-        onClick={() => void flushQueue()}
-        className="flex shrink-0 items-center gap-1.5 rounded-md border border-amber-600/40 bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-700 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
-      >
-        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
-        {queueCount} pending
-      </button>
-    )
-  }
-  if (compact) return null
+  const pill = (key: string, content: ReactNode, className: string, onClick?: () => void) => (
+    <motion.span
+      key={key}
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.8 }}
+      transition={springPop}
+      className={className}
+      {...(onClick
+        ? {
+            onClick,
+            role: 'button',
+            tabIndex: 0,
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.key === 'Enter' || e.key === ' ') onClick()
+            },
+          }
+        : {})}
+    >
+      {content}
+    </motion.span>
+  )
+
   return (
-    <span className="mx-3 mb-2 flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
-      <span
-        className={cn(
-          'h-1.5 w-1.5 rounded-full',
-          sseConnected ? 'bg-emerald-600 animate-pulse dark:bg-emerald-500' : 'bg-amber-500'
-        )}
-        aria-hidden
-      />
-      {sseConnected ? 'Live' : 'Reconnecting…'}
-    </span>
+    <AnimatePresence initial={false} mode="popLayout">
+      {!online
+        ? pill(
+            'offline',
+            <>
+              <span className="h-1.5 w-1.5 rounded-full bg-destructive" aria-hidden />
+              Offline
+            </>,
+            'flex shrink-0 items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-[11px] font-medium text-destructive'
+          )
+        : queueCount > 0
+          ? pill(
+              'pending',
+              <>
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
+                {queueCount} pending
+              </>,
+              'flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-amber-600/40 bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-700 transition-colors hover:bg-amber-500/20 dark:text-amber-400',
+              () => void flushQueue()
+            )
+          : compact
+            ? null
+            : pill(
+                'live',
+                <>
+                  <span
+                    className={cn(
+                      'h-1.5 w-1.5 rounded-full',
+                      sseConnected ? 'bg-emerald-600 animate-pulse dark:bg-emerald-500' : 'bg-amber-500'
+                    )}
+                    aria-hidden
+                  />
+                  {sseConnected ? 'Live' : 'Reconnecting…'}
+                </>,
+                'mx-3 mb-2 flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground'
+              )}
+    </AnimatePresence>
   )
 }

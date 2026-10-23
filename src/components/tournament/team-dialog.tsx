@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { KeyRound, Loader2, ShieldCheck, Trash2, UserPlus } from 'lucide-react'
 import {
   Dialog,
@@ -26,6 +27,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { InvitesPanel } from '@/components/tournament/invites-panel'
 import { useToast } from '@/hooks/use-toast'
+import { easeOutExpo } from '@/components/tournament/ui-bits'
 import { useAppStore } from '@/store/app-store'
 import type { AdminUserDTO } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -190,14 +192,27 @@ export function TeamDialog() {
             </Button>
           </form>
 
-          {/* Accounts list */}
+          {/* Accounts list — accounts slide in, glide on removal */}
           <div className="space-y-2">
             <h3 className="text-sm font-semibold">Accounts ({users.length})</h3>
             <ul className="max-h-72 space-y-2 overflow-y-auto pr-1">
-              {users.map((u) => {
-                const isSelf = u.id === session?.id
-                return (
-                  <li key={u.id} className="flex flex-wrap items-center gap-2 rounded-xl border p-3">
+              <AnimatePresence initial={false} mode="popLayout">
+                {users.map((u) => {
+                  const isSelf = u.id === session?.id
+                  return (
+                    <motion.li
+                      key={u.id}
+                      layout
+                      initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.96 }}
+                      transition={{
+                        duration: 0.28,
+                        ease: easeOutExpo,
+                        layout: { type: 'spring', stiffness: 320, damping: 34 },
+                      }}
+                      className="flex flex-wrap items-center gap-2 rounded-xl border p-3"
+                    >
                     <div className="min-w-0 flex-1">
                       <p className="flex items-center gap-2 truncate font-semibold">
                         {u.name}
@@ -244,9 +259,10 @@ export function TeamDialog() {
                         <Trash2 className="h-3.5 w-3.5" aria-hidden />
                       </Button>
                     </div>
-                  </li>
-                )
-              })}
+                    </motion.li>
+                  )
+                })}
+              </AnimatePresence>
               {users.length === 0 ? (
                 <li className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">
                   No accounts yet.

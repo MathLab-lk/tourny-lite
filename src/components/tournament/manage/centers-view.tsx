@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,7 +25,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
-import { EmptyState, PageHeader, medalText } from '@/components/tournament/ui-bits'
+import { AnimatedNumber, EmptyState, PageHeader, easeOutExpo, medalText } from '@/components/tournament/ui-bits'
 import { useAppStore } from '@/store/app-store'
 import { cn } from '@/lib/utils'
 import type { StandingRow } from '@/lib/types'
@@ -88,7 +89,12 @@ export function CentersView() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 pt-6 sm:px-6">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.26, ease: easeOutExpo }}
+      className="mx-auto w-full max-w-4xl px-4 pt-6 sm:px-6"
+    >
       <PageHeader
         title="Centers"
         meta={`${centers.length} participating · standings update live`}
@@ -144,29 +150,53 @@ export function CentersView() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {standings.map((row) => (
-                  <TableRow key={row.centerId}>
-                    <TableCell className="font-semibold tabular-nums">{row.centerCode}</TableCell>
-                    <TableCell className="text-muted-foreground">{row.centerName || '—'}</TableCell>
-                    <TableCell className={cn('text-center font-semibold tabular-nums', medalText.gold)}>{row.gold}</TableCell>
-                    <TableCell className="text-center font-semibold tabular-nums">{row.silver}</TableCell>
-                    <TableCell className={cn('text-center font-semibold tabular-nums', medalText.bronze)}>{row.bronze}</TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">{row.total}</TableCell>
-                    {isAdmin ? (
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => setRemoveTarget(row)}
-                          aria-label={`Remove center ${row.centerCode}`}
-                        >
-                          <Trash2 className="h-4 w-4" aria-hidden />
-                        </Button>
+                {/* Rows glide when live results re-order the standings
+                    and fold away when a center is removed. */}
+                <AnimatePresence initial={false}>
+                  {standings.map((row) => (
+                    <motion.tr
+                      key={row.centerId}
+                      layout="position"
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={{
+                        duration: 0.3,
+                        ease: easeOutExpo,
+                        layout: { type: 'spring', stiffness: 320, damping: 34 },
+                      }}
+                      className="hover:bg-muted/50 border-b transition-colors last:border-0"
+                    >
+                      <TableCell className="font-semibold tabular-nums">{row.centerCode}</TableCell>
+                      <TableCell className="text-muted-foreground">{row.centerName || '—'}</TableCell>
+                      <TableCell className={cn('text-center font-semibold tabular-nums', medalText.gold)}>
+                        <AnimatedNumber value={row.gold} />
                       </TableCell>
-                    ) : null}
-                  </TableRow>
-                ))}
+                      <TableCell className="text-center font-semibold tabular-nums">
+                        <AnimatedNumber value={row.silver} />
+                      </TableCell>
+                      <TableCell className={cn('text-center font-semibold tabular-nums', medalText.bronze)}>
+                        <AnimatedNumber value={row.bronze} />
+                      </TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">
+                        <AnimatedNumber value={row.total} />
+                      </TableCell>
+                      {isAdmin ? (
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => setRemoveTarget(row)}
+                            aria-label={`Remove center ${row.centerCode}`}
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden />
+                          </Button>
+                        </TableCell>
+                      ) : null}
+                    </motion.tr>
+                  ))}
+                </AnimatePresence>
               </TableBody>
             </Table>
           </div>
@@ -199,6 +229,6 @@ export function CentersView() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </motion.div>
   )
 }
