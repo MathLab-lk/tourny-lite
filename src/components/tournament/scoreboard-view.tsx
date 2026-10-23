@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   Award,
@@ -18,20 +19,28 @@ import { cn } from '@/lib/utils'
 /**
  * Full-screen projector scoreboard — a cinematic dark stage:
  * gold / silver / bronze rank accents, staggered 3D entrance,
- * count-up totals and a layered atmosphere. Built to be thrown
- * on a big screen the moment results land.
+ * count-up totals and a layered atmosphere. Presented modally on
+ * top of the app; closing it returns to the presenter's context.
  */
 export function ScoreboardView() {
   const detail = useAppStore((s) => s.detail)
   const loading = useAppStore((s) => s.loadingDetail)
   const sseConnected = useAppStore((s) => s.sseConnected)
   const lastUpdated = useAppStore((s) => s.lastUpdated)
-  const setView = useAppStore((s) => s.setView)
-  const closeTournament = useAppStore((s) => s.closeTournament)
+  const closeScoreboard = useAppStore((s) => s.closeScoreboard)
 
   const tournament = detail?.tournament
   const standings = detail?.standings ?? []
   const progress = detail?.progress
+
+  // Escape dismisses the presentation, like any modal.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeScoreboard()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [closeScoreboard])
 
   const goFullscreen = () => {
     if (typeof document === 'undefined') return
@@ -53,7 +62,7 @@ export function ScoreboardView() {
     if (rank === 1) return <Crown className="h-5 w-5 text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]" aria-hidden />
     if (rank === 2) return <Medal className="h-5 w-5 text-zinc-300" aria-hidden />
     if (rank === 3) return <Award className="h-5 w-5 text-orange-600" aria-hidden />
-    return <span className="font-semibold text-zinc-500 tabular-nums">{rank}</span>
+    return <span className="font-semibold text-zinc-400 tabular-nums">{rank}</span>
   }
 
   return (
@@ -87,7 +96,7 @@ export function ScoreboardView() {
           size="sm"
           variant="ghost"
           className="gap-1.5 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-          onClick={() => (tournament ? setView('overview') : closeTournament())}
+          onClick={closeScoreboard}
         >
           <X className="h-4 w-4" aria-hidden /> Exit
         </Button>

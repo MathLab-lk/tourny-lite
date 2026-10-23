@@ -15,8 +15,7 @@ import type {
 export type View =
   | 'home'
   | 'overview'
-  | 'judge'
-  | 'scoreboard'
+  | 'scoring'
   | 'centers'
   | 'history'
   | 'settings'
@@ -72,6 +71,10 @@ interface AppState {
   online: boolean
   printMode: PrintMode
   hydrated: boolean
+  // The scoreboard is a presentation mode (a modal thrown on a
+  // projector), not a destination — so it lives outside the view
+  // model and never disturbs the underlying navigation state.
+  scoreboardOpen: boolean
 
   // Session (public read / authenticated write)
   session: SessionUserDTO | null
@@ -84,6 +87,8 @@ interface AppState {
   loadingInvites: boolean
 
   setView: (view: View) => void
+  openScoreboard: () => void
+  closeScoreboard: () => void
   hydrate: () => void
   setAuthDialogOpen: (open: boolean) => void
   setTeamDialogOpen: (open: boolean) => void
@@ -145,6 +150,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   online: true,
   printMode: null,
   hydrated: false,
+  scoreboardOpen: false,
 
   session: null,
   setupRequired: false,
@@ -156,6 +162,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   loadingInvites: false,
 
   setView: (view) => set({ view }),
+
+  openScoreboard: () => set({ scoreboardOpen: true }),
+  closeScoreboard: () => set({ scoreboardOpen: false }),
 
   hydrate: () => {
     if (get().hydrated) return
@@ -326,7 +335,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   openTournament: async (id, view) => {
     if (typeof window !== 'undefined') window.localStorage.setItem(ACTIVE_KEY, id)
-    set({ activeTournamentId: id, view: view ?? 'judge', loadingDetail: true })
+    // Everyone lands on the Overview — the tournament's home screen.
+    // From there the tabs lead naturally to Scoring or the projector.
+    set({ activeTournamentId: id, view: view ?? 'overview', loadingDetail: true })
     if (eventSource) {
       eventSource.close()
       eventSource = null
@@ -366,7 +377,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       eventSource = null
     }
     if (typeof window !== 'undefined') window.localStorage.removeItem(ACTIVE_KEY)
-    set({ activeTournamentId: null, detail: null, audit: [], view: 'home', sseConnected: false })
+    set({
+      activeTournamentId: null,
+      detail: null,
+      audit: [],
+      view: 'home',
+      sseConnected: false,
+      scoreboardOpen: false,
+    })
   },
 
   createFromPreset: async (presetId, nameOverride) => {

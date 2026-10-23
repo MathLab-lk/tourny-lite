@@ -30,6 +30,7 @@ export function OverviewView() {
   const audit = useAppStore((s) => s.audit)
   const loadAudit = useAppStore((s) => s.loadAudit)
   const printSheet = useAppStore((s) => s.printSheet)
+  const openScoreboard = useAppStore((s) => s.openScoreboard)
   const setView = useAppStore((s) => s.setView)
 
   const [selectedEvent, setSelectedEvent] = useState<EventDTO | null>(null)
@@ -56,7 +57,7 @@ export function OverviewView() {
   if (!detail || !activeId) {
     return (
       <div className="mx-auto w-full max-w-6xl px-4 pt-10 sm:px-6">
-        <EmptyState title="No tournament selected" hint="Pick a tournament from the sidebar." />
+        <EmptyState title="No tournament selected" hint="Choose a tournament to get started." />
       </div>
     )
   }
@@ -91,8 +92,8 @@ export function OverviewView() {
         }
         actions={
           <>
-            <Button size="sm" className="h-8 gap-1.5" onClick={() => setView('scoreboard')}>
-              <Presentation className="h-4 w-4" aria-hidden /> Scoreboard
+            <Button size="sm" className="h-8 gap-1.5" onClick={openScoreboard}>
+              <Presentation className="h-4 w-4" aria-hidden /> Present
             </Button>
             <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={doPrint}>
               <Printer className="h-4 w-4" aria-hidden /> Print

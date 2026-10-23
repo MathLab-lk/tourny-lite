@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   ArrowRight,
+  ChevronRight,
   Copy,
   Ellipsis,
   LayoutTemplate,
@@ -104,7 +105,9 @@ export function HomeView() {
     toast(ok ? { title: 'Tournament deleted' } : { title: 'Could not delete the tournament', variant: 'destructive' })
   }
 
-  const openRow = (id: string) => void openTournament(id, session ? 'judge' : 'scoreboard')
+  // Every tap opens the tournament the same way — its Overview.
+  // From there the tabs lead to scoring or the projector.
+  const openRow = (id: string) => void openTournament(id)
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 pt-6 sm:px-6 lg:pt-8">
@@ -196,15 +199,10 @@ export function HomeView() {
                       {t.centerCount} centers
                     </span>
                   </button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 shrink-0 text-muted-foreground sm:hidden"
-                    onClick={() => openRow(t.id)}
-                    aria-label={`Open ${t.name}`}
-                  >
-                    <ArrowRight className="h-4 w-4" aria-hidden />
-                  </Button>
+                  <ChevronRight
+                    className="h-4 w-4 shrink-0 text-muted-foreground/50"
+                    aria-hidden
+                  />
                   {isAdmin ? (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

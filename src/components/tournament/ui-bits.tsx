@@ -157,7 +157,8 @@ export function AnimatedNumber({
 
 /* ── Page header ──────────────────────────────────────────────── */
 
-/** Consistent view header: title row + optional meta + actions. */
+/** Consistent view header: iOS-flavored large title + optional meta
+ *  and actions. One typographic voice across every page. */
 export function PageHeader({
   title,
   meta,
@@ -172,10 +173,10 @@ export function PageHeader({
   return (
     <div className={cn('flex flex-wrap items-start justify-between gap-3', className)}>
       <div className="min-w-0">
-        <h1 className="truncate text-lg font-semibold tracking-tight sm:text-xl">{title}</h1>
+        <h1 className="truncate text-[22px] font-bold leading-tight tracking-tight sm:text-2xl">{title}</h1>
         {meta ? <div className="mt-1 text-[13px] text-muted-foreground">{meta}</div> : null}
       </div>
-      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
+      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2 pt-0.5">{actions}</div> : null}
     </div>
   )
 }

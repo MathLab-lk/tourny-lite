@@ -158,6 +158,8 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    /* No gray flash when tapping controls on iOS */
+    -webkit-tap-highlight-color: transparent;
   }
   body {
     @apply bg-background text-foreground;
@@ -174,6 +176,14 @@
   [role='button']:active:not(:disabled),
   [role='menuitem']:active:not(:disabled) {
     transform: scale(0.97);
+  }
+  /* Comfortable 44px menu targets on phones */
+  @media (max-width: 639px) {
+    [data-slot='dropdown-menu-item'],
+    [data-slot='dropdown-menu-checkbox-item'],
+    [data-slot='dropdown-menu-radio-item'] {
+      min-height: 44px;
+    }
   }
 }
 

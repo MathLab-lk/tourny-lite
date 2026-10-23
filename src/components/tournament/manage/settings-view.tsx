@@ -41,7 +41,7 @@ export function SettingsView() {
       <div className="mx-auto w-full max-w-4xl px-4 pt-10 sm:px-6">
         <EmptyState
           title={detail ? 'Administrator access required' : 'No tournament selected'}
-          hint={detail ? 'Ask an administrator to adjust tournament settings.' : 'Pick a tournament from the sidebar.'}
+          hint={detail ? 'Ask an administrator to adjust tournament settings.' : 'Choose a tournament to get started.'}
         />
       </div>
     )

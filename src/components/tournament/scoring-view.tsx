@@ -8,7 +8,7 @@ import {
   Send,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import {
@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
+import { useIsDesktop } from '@/hooks/use-mobile'
 import { PodiumEditor, type PodiumValue } from '@/components/tournament/podium-editor'
 import { EmptyState, StatusChip, medalText } from '@/components/tournament/ui-bits'
 import { useAppStore } from '@/store/app-store'
@@ -33,19 +34,7 @@ import type { EventDTO } from '@/lib/types'
  * Optimized for fast, repeatable field entry on touch and desktop alike.
  */
 
-function useIsDesktop() {
-  const [isDesktop, setIsDesktop] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1024px)')
-    const update = () => setIsDesktop(mq.matches)
-    update()
-    mq.addEventListener('change', update)
-    return () => mq.removeEventListener('change', update)
-  }, [])
-  return isDesktop
-}
-
-export function JudgeView() {
+export function ScoringView() {
   const { toast } = useToast()
   const detail = useAppStore((s) => s.detail)
   const loading = useAppStore((s) => s.loadingDetail)
@@ -168,7 +157,7 @@ export function JudgeView() {
   if (!detail || !tournament) {
     return (
       <div className="mx-auto w-full max-w-5xl px-4 pt-10 sm:px-6">
-        <EmptyState title="No tournament selected" hint="Pick a tournament from the sidebar." />
+        <EmptyState title="No tournament selected" hint="Choose a tournament to get started." />
       </div>
     )
   }
@@ -176,9 +165,9 @@ export function JudgeView() {
   const recordPanel = selectedEvent ? (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Award className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-          <span className="truncate text-sm font-semibold">{selectedEvent.label}</span>
+          <span className="min-w-0 text-sm font-semibold">{selectedEvent.label}</span>
           <StatusChip status={selectedEvent.status} />
         </div>
       </div>
@@ -366,6 +355,9 @@ export function JudgeView() {
           <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
             <DialogHeader className="sr-only">
               <DialogTitle>{selectedEvent?.label ?? 'Record result'}</DialogTitle>
+              <DialogDescription>
+                Assign the podium places for this event and record the result.
+              </DialogDescription>
             </DialogHeader>
             {recordPanel}
           </DialogContent>

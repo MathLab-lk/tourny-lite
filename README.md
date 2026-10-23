@@ -14,10 +14,11 @@ Run an entire event from one lightweight application:
 - **Field scoring console** — touch-optimised for phones and tablets.
   Scorekeepers pick a division, a game and an event, then assign the podium
   with three taps. Results saved while offline sync automatically.
-- **Live projector scoreboard** — a high-contrast dark screen for the
-  auditorium with gold / silver / bronze rank accents and deterministic
-  tie-breaking (total → first → second → third places).
-- **Coordination console (M&E)** — a division × game matrix of every event,
+- **Live projector scoreboard** — presented from any tournament's Overview
+  as a full-screen, high-contrast dark stage with gold / silver / bronze
+  rank accents and deterministic tie-breaking (total → first → second →
+  third places). Esc or Exit returns to wherever you launched it.
+- **Coordination tools (M&E)** — a division × game matrix of every event,
   result corrections with mandatory justification, a complete revision
   history, center management and A4 print sheets (event progress).
 - **Secure by default** — tournaments and results are public to read;
@@ -36,6 +37,20 @@ The first account created becomes the administrator (first-run setup);
 further accounts are added from *Team & access* — either created directly
 or via single-use invitation codes the recipient redeems to set up their
 own credentials.
+
+## Navigation model
+
+iOS-inspired and consistent across devices:
+
+- **Home** — the tournament list; every tournament opens on its Overview.
+- **Overview · Scoring · History** — the primary destinations (a glass
+  sidebar on desktop, a four-tab bar — Home, Overview, Scoring, More — on
+  phones).
+- **Centers · Settings** — occasional management work, grouped under
+  *Manage* on the sidebar and inside *More* on phones.
+- **The scoreboard is a presentation, not a place** — it never occupies a
+  tab; *Present* on the Overview throws it on the projector, and closing
+  it returns to your context.
 
 ### Invitation codes
 

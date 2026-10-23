@@ -5,6 +5,7 @@ import { useTheme } from 'next-themes'
 import { motion } from 'framer-motion'
 import {
   ChevronDown,
+  ChevronLeft,
   ClipboardCheck,
   History,
   Home,
@@ -12,7 +13,6 @@ import {
   LogIn,
   LogOut,
   Moon,
-  Presentation,
   Settings,
   Users,
   Sun,
@@ -35,10 +35,18 @@ import { cn } from '@/lib/utils'
 import type { TournamentStatus, TournamentSummaryDTO } from '@/lib/types'
 
 /*
- * Application shell — a quiet, Linear-style inverted L with depth:
- * translucent glass chrome floating over a slow aurora, a spring-
- * animated nav indicator and per-view entrance motion. Content stays
- * the hero; chrome stays out of the way.
+ * Application shell — iOS-inspired adaptive navigation:
+ *
+ *  - Destinations are places, never actions. The scoreboard (a
+ *    projector mode) is presented modally and therefore lives
+ *    outside this nav entirely.
+ *  - Desktop keeps a glass sidebar; phones get a tab bar with the
+ *    same destinations, re-grouped by frequency (Apple's own
+ *    sidebar ↔ tab bar split).
+ *  - "Back" on mobile is a real, labeled back button — no hidden
+ *    logo shortcuts.
+ *
+ * Content stays the hero; chrome stays out of the way.
  */
 
 interface NavItem {
@@ -47,12 +55,15 @@ interface NavItem {
   icon: typeof Home
 }
 
-const TOURNAMENT_NAV: NavItem[] = [
+const PRIMARY_NAV: NavItem[] = [
   { key: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { key: 'judge', label: 'Scoring', icon: ClipboardCheck },
-  { key: 'scoreboard', label: 'Scoreboard', icon: Presentation },
-  { key: 'centers', label: 'Centers', icon: Users },
+  { key: 'scoring', label: 'Scoring', icon: ClipboardCheck },
   { key: 'history', label: 'History', icon: History },
+]
+
+const MANAGE_NAV: NavItem[] = [
+  { key: 'centers', label: 'Centers', icon: Users },
+  { key: 'settings', label: 'Settings', icon: Settings },
 ]
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -73,12 +84,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const hasTournament = activeTournamentId !== null
 
-  const navItems: NavItem[] = hasTournament
-    ? [
-        ...TOURNAMENT_NAV,
-        ...(isAdmin ? [{ key: 'settings' as View, label: 'Settings', icon: Settings }] : []),
-      ]
-    : []
+  const manageItems = MANAGE_NAV.filter((item) => item.key !== 'settings' || isAdmin)
 
   const go = (next: View) => {
     setView(next)
@@ -132,17 +138,40 @@ export function AppShell({ children }: { children: ReactNode }) {
           />
         </div>
 
-        {/* Navigation */}
-        <nav className="flex flex-col gap-0.5 px-3 pt-4" aria-label="Tournament views">
-          {navItems.map((item) => (
-            <SidebarLink
-              key={item.key}
-              item={item}
-              active={view === item.key}
-              onClick={() => setView(item.key)}
-            />
-          ))}
-        </nav>
+        {/* Navigation — primary destinations */}
+        {hasTournament ? (
+          <>
+            <nav className="flex flex-col gap-0.5 px-3 pt-4" aria-label="Tournament views">
+              {PRIMARY_NAV.map((item) => (
+                <SidebarLink
+                  key={item.key}
+                  item={item}
+                  active={view === item.key}
+                  onClick={() => setView(item.key)}
+                />
+              ))}
+            </nav>
+
+            {/* Manage — occasional, admin-leaning work */}
+            {manageItems.length > 0 ? (
+              <div className="px-3 pt-5">
+                <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                  Manage
+                </p>
+                <nav className="flex flex-col gap-0.5" aria-label="Manage">
+                  {manageItems.map((item) => (
+                    <SidebarLink
+                      key={item.key}
+                      item={item}
+                      active={view === item.key}
+                      onClick={() => setView(item.key)}
+                    />
+                  ))}
+                </nav>
+              </div>
+            ) : null}
+          </>
+        ) : null}
 
         <div className="flex-1" />
 
@@ -191,17 +220,22 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       {/* ── Mobile top bar ──────────────────────────────────────── */}
-      <header className="glass-bar sticky top-0 z-40 flex h-14 items-center gap-2 border-b px-4 lg:hidden print:hidden">
-        <button
-          type="button"
-          onClick={() => (hasTournament ? closeTournament() : undefined)}
-          className="flex shrink-0 items-center gap-2"
-          aria-label="Tourny Lite"
-        >
-          <img src="/logo.svg" alt="" className="h-6 w-6 rounded-md" width={24} height={24} />
-        </button>
-        <span className="min-w-0 flex-1 truncate text-center text-sm font-medium">
-          {activeTournament?.name ?? 'Tourny Lite'}
+      <header className="glass-bar sticky top-0 z-40 flex h-14 items-center gap-1 border-b px-3 lg:hidden print:hidden">
+        {hasTournament ? (
+          <button
+            type="button"
+            onClick={closeTournament}
+            className="-ml-1 flex h-10 shrink-0 items-center gap-0.5 rounded-lg pl-1.5 pr-2 text-[15px] text-primary transition-opacity hover:opacity-70"
+            aria-label="Back to tournaments"
+          >
+            <ChevronLeft className="h-5 w-5" aria-hidden />
+            <span className="font-medium">Tournaments</span>
+          </button>
+        ) : (
+          <img src="/logo.svg" alt="" className="ml-1 h-6 w-6 shrink-0 rounded-md" width={24} height={24} />
+        )}
+        <span className="min-w-0 flex-1 truncate text-center text-[15px] font-semibold tracking-tight">
+          {hasTournament ? (activeTournament?.name ?? '') : 'Tourny Lite'}
         </span>
         {hasTournament ? <SyncStatus compact /> : null}
         {themeToggle}
@@ -210,7 +244,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary"
                 aria-label="Account"
               >
                 {initials(session.name)}
@@ -221,7 +255,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         ) : (
           <Button
             size="sm"
-            className="h-8 px-3 text-[13px]"
+            className="h-8 shrink-0 px-3 text-[13px]"
             onClick={() => setAuthDialogOpen(true)}
           >
             Sign in
@@ -234,16 +268,16 @@ export function AppShell({ children }: { children: ReactNode }) {
         <main className="pb-24 lg:pb-10">
           <motion.div
             key={view}
-            initial={{ opacity: 0, y: 12 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           >
             {children}
           </motion.div>
         </main>
       </div>
 
-      {/* ── Mobile bottom tabs ──────────────────────────────────── */}
+      {/* ── Mobile tab bar ───────────────────────────────────────── */}
       <nav
         className="glass-bar fixed inset-x-0 bottom-0 z-40 flex border-t pb-[env(safe-area-inset-bottom)] lg:hidden print:hidden"
         aria-label="Primary"
@@ -252,35 +286,28 @@ export function AppShell({ children }: { children: ReactNode }) {
         {hasTournament ? (
           <>
             <TabLink icon={LayoutDashboard} label="Overview" active={view === 'overview'} onClick={() => go('overview')} />
-            <TabLink icon={ClipboardCheck} label="Scoring" active={view === 'judge'} onClick={() => go('judge')} />
-            <TabLink icon={Presentation} label="Board" active={view === 'scoreboard'} onClick={() => go('scoreboard')} />
+            <TabLink icon={ClipboardCheck} label="Scoring" active={view === 'scoring'} onClick={() => go('scoring')} />
           </>
         ) : null}
-        <TabLink icon={Ellipsis} label="More" active={false} onClick={() => setMoreOpen(true)} />
+        <TabLink icon={Ellipsis} label="More" active={moreOpen} onClick={() => setMoreOpen(true)} />
       </nav>
 
       {/* ── More sheet (mobile) ─────────────────────────────────── */}
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
-        <SheetContent side="bottom" className="rounded-t-2xl px-3 pb-4 pt-2">
+        <SheetContent
+          side="bottom"
+          className="rounded-t-2xl px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2"
+        >
+          <div className="mx-auto mb-1 h-1.5 w-10 rounded-full bg-muted-foreground/40" aria-hidden />
           <SheetHeader className="px-2 text-left">
-            <SheetTitle className="text-sm">Browse</SheetTitle>
+            <SheetTitle className="text-sm">More</SheetTitle>
           </SheetHeader>
           <div className="mt-1 grid gap-0.5">
             {hasTournament ? (
               <>
-                {TOURNAMENT_NAV.filter((n) => !['overview', 'judge', 'scoreboard'].includes(n.key)).map(
-                  (item) => (
-                    <SheetLink
-                      key={item.key}
-                      icon={item.icon}
-                      label={item.label}
-                      onClick={() => go(item.key)}
-                    />
-                  )
-                )}
-                {isAdmin ? (
-                  <SheetLink icon={Settings} label="Settings" onClick={() => go('settings')} />
-                ) : null}
+                <SheetLink icon={History} label="History" onClick={() => go('history')} />
+                <SheetLink icon={Users} label="Centers" onClick={() => go('centers')} />
+                {isAdmin ? <SheetLink icon={Settings} label="Settings" onClick={() => go('settings')} /> : null}
               </>
             ) : null}
             {isAdmin ? (
@@ -315,6 +342,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               />
             )}
           </div>
+          <Button
+            variant="outline"
+            className="mt-2 h-11 w-full text-[15px] font-semibold"
+            onClick={() => setMoreOpen(false)}
+          >
+            Cancel
+          </Button>
         </SheetContent>
       </Sheet>
     </div>
@@ -361,6 +395,7 @@ function SidebarLink({
   )
 }
 
+/** iOS-style tab: color emphasis + a gentle icon bounce on activation. */
 function TabLink({
   icon: Icon,
   label,
@@ -379,18 +414,16 @@ function TabLink({
       aria-current={active ? 'page' : undefined}
       className={cn(
         'relative flex min-h-14 flex-1 flex-col items-center justify-center gap-1 py-1 text-[10px] font-medium transition-colors',
-        active ? 'text-foreground' : 'text-muted-foreground/80'
+        active ? 'text-primary' : 'text-muted-foreground/70'
       )}
     >
-      {active ? (
-        <motion.span
-          layoutId="tab-indicator"
-          transition={navSpring}
-          className="absolute top-0 h-[3px] w-10 rounded-full bg-primary"
-          aria-hidden
-        />
-      ) : null}
-      <Icon className="h-[18px] w-[18px]" aria-hidden />
+      <motion.span
+        animate={active ? { scale: [1, 1.18, 1] } : { scale: 1 }}
+        transition={{ duration: 0.42, ease: [0.34, 1.56, 0.64, 1] }}
+        className="flex"
+      >
+        <Icon className="h-[22px] w-[22px]" aria-hidden />
+      </motion.span>
       {label}
     </button>
   )
@@ -519,9 +552,9 @@ function SyncStatus({ compact }: { compact?: boolean }) {
 
   if (!online) {
     return (
-      <span className="mx-3 mb-2 flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-[11px] font-medium text-destructive">
+      <span className="flex shrink-0 items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-[11px] font-medium text-destructive">
         <span className="h-1.5 w-1.5 rounded-full bg-destructive" aria-hidden />
-        Offline — saved locally
+        Offline
       </span>
     )
   }
@@ -530,10 +563,10 @@ function SyncStatus({ compact }: { compact?: boolean }) {
       <button
         type="button"
         onClick={() => void flushQueue()}
-        className="mx-3 mb-2 flex items-center gap-1.5 rounded-md border border-amber-600/40 bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-700 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
+        className="flex shrink-0 items-center gap-1.5 rounded-md border border-amber-600/40 bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-700 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
       >
         <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
-        {queueCount} pending — sync
+        {queueCount} pending
       </button>
     )
   }

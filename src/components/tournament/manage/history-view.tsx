@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
+import { motion } from 'framer-motion'
 import { useAppStore } from '@/store/app-store'
 import { AuditRow } from '@/components/tournament/manage/audit-row'
 import { EmptyState, PageHeader } from '@/components/tournament/ui-bits'
@@ -44,7 +45,7 @@ export function HistoryView() {
   if (!detail) {
     return (
       <div className="mx-auto w-full max-w-4xl px-4 pt-10 sm:px-6">
-        <EmptyState title="No tournament selected" hint="Pick a tournament from the sidebar." />
+        <EmptyState title="No tournament selected" hint="Choose a tournament to get started." />
       </div>
     )
   }
@@ -57,23 +58,38 @@ export function HistoryView() {
         title="History"
         meta="Every result change with its author and justification"
         actions={
-          <div className="flex items-center gap-1 rounded-lg border bg-card p-0.5" role="group" aria-label="Filter history">
-            {FILTERS.map((f) => (
-              <button
-                key={f.key}
-                type="button"
-                onClick={() => setFilter(f.key)}
-                aria-pressed={filter === f.key}
-                className={cn(
-                  'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
-                  filter === f.key
-                    ? 'bg-foreground text-background'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                {f.label}
-              </button>
-            ))}
+          <div
+            className="flex items-center gap-0.5 rounded-lg bg-muted p-0.5"
+            role="group"
+            aria-label="Filter history"
+          >
+            {FILTERS.map((f) => {
+              const active = filter === f.key
+              return (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => setFilter(f.key)}
+                  aria-pressed={active}
+                  className={cn(
+                    'relative min-h-9 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                    active
+                      ? 'font-semibold text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  {active ? (
+                    <motion.span
+                      layoutId="history-segment"
+                      transition={{ type: 'spring', stiffness: 520, damping: 40 }}
+                      className="absolute inset-0 rounded-md bg-card shadow-md ring-1 ring-black/10"
+                      aria-hidden
+                    />
+                  ) : null}
+                  <span className="relative z-10">{f.label}</span>
+                </button>
+              )
+            })}
           </div>
         }
       />
