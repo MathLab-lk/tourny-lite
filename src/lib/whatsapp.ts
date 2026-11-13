@@ -6,10 +6,13 @@ import type { EventDTO, TournamentDetailDTO } from '@/lib/types'
 //
 // The app talks to a self-hosted WAHA server (devlikeapro/waha).
 // Verified REST surface (docs + live probe):
-//   GET  /api/sessions              → [{ name, status, ... }]
-//   GET  /api/{session}/groups      → [{ id: "…@g.us", name, ... }]
-//   POST /api/sendText              → { session, chatId, text }
+//   GET  /api/sessions          → [{ name, status, ... }]
+//   GET  /api/{session}/groups  → groups the account belongs to
+//   POST /api/sendText          → { session, chatId, text }
 // Every request carries the `X-Api-Key` header when a key is set.
+// Engines name the group fields differently — the JS cores return
+// { id, name }, the Go core (gows, e.g. the *-arm images) returns
+// { JID, Name }; `subject` covers older cores. All three are read.
 //
 // The connection is configured by the administrator in Settings
 // (stored in the AppSetting table); environment variables act as
@@ -192,25 +195,43 @@ export async function listWahaSessions(baseUrl: string, apiKey: string): Promise
     .map((s) => ({ name: s.name as string, status: s.status ?? 'UNKNOWN' }))
 }
 
+// Field spellings differ per engine: JS cores use { id, name }, the
+// Go core (gows) returns { JID, Name }, older cores { id, subject }.
 interface RawGroup {
   id?: string
+  JID?: string
   name?: string
+  Name?: string
   subject?: string
 }
 
-/** Lists the groups the connected account belongs to. */
+function normalizeGroups(raw: RawGroup[]): WahaGroupInfo[] {
+  return raw
+    .map((g) => {
+      const id = g.id ?? g.JID
+      const name = (g.name ?? g.Name ?? g.subject)?.trim()
+      return id ? { id, name: name || id } : null
+    })
+    .filter((g): g is WahaGroupInfo => g !== null && g.id.endsWith(GROUP_SUFFIX))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** Lists the groups the connected account belongs to, sorted by
+ *  name. Group ids must end in @g.us; unnamed groups show their id. */
 export async function listWahaGroups(
   baseUrl: string,
   apiKey: string,
   session: string
 ): Promise<WahaGroupInfo[]> {
-  const url =
-    `/api/${encodeURIComponent(session)}/groups` +
-    `?exclude=participants&sortBy=subject&sortOrder=asc`
-  const groups = await wahaRequest<RawGroup[]>({ baseUrl, apiKey }, url)
-  return groups
-    .filter((g) => typeof g.id === 'string' && g.id.endsWith(GROUP_SUFFIX))
-    .map((g) => ({ id: g.id as string, name: (g.name ?? g.subject ?? g.id) as string }))
+  // No query params: engines disagree on which are supported (gows
+  // rejects unknown sortBy values, ignores `exclude`), so the plain
+  // endpoint is the one surface every core answers — sorting happens
+  // client-side instead.
+  const groups = await wahaRequest<RawGroup[]>(
+    { baseUrl, apiKey },
+    `/api/${encodeURIComponent(session)}/groups`
+  )
+  return normalizeGroups(groups)
 }
 
 /** Sends plain text to the configured group. */

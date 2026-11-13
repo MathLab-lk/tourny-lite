@@ -160,9 +160,14 @@ async function main() {
     })
     ok('loads groups for the session', withGroups.status === 200 && withGroups.data.groups?.length === 3, withGroups.data)
     ok(
-      'groups are @g.us with names',
+      'groups are @g.us with names (gows JID/Name shape normalized)',
       withGroups.data.groups?.every((g: any) => g.id.endsWith('@g.us') && g.name),
       withGroups.data
+    )
+    ok(
+      'unnamed group falls back to its id as name',
+      withGroups.data.groups?.some((g: any) => g.id === '1203630yyyyyy444555666@g.us' && g.name === g.id),
+      withGroups.data.groups
     )
     ok('session status reported', withGroups.data.session?.status === 'WORKING', withGroups.data.session)
 

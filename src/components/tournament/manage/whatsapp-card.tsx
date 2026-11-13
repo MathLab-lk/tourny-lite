@@ -235,6 +235,17 @@ export function WhatsAppCard() {
 
   const meta = sessionStatus ? sessionMeta(sessionStatus) : null
 
+  // The group picker's state, in words — never claims "Loading"
+  // when nothing is in flight (an empty result is not a load).
+  const groupPlaceholder =
+    groups.length > 0
+      ? 'Choose a group'
+      : !session
+        ? 'Choose a session first'
+        : busy === 'connect'
+          ? 'Loading groups…'
+          : 'No groups found — join one with the account'
+
   return (
     <Card>
       <CardHeader className="pb-4">
@@ -301,9 +312,7 @@ export function WhatsAppCard() {
                   disabled={groups.length === 0}
                 >
                   <SelectTrigger id="wa-group" className="w-full">
-                    <SelectValue
-                      placeholder={groups.length === 0 ? 'Loading groups…' : 'Choose a group'}
-                    />
+                    <SelectValue placeholder={groupPlaceholder} />
                   </SelectTrigger>
                   <SelectContent>
                     {groups.map((g) => (

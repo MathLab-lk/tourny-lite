@@ -87,9 +87,11 @@ Share results to a WhatsApp group through a self-hosted
    WhatsApp text.
 
 The connected WhatsApp account must be a member of the destination
-group. Headless deployments can pre-configure the connection with
-`WAHA_BASE_URL`, `WAHA_API_KEY`, `WAHA_SESSION` and `WAHA_GROUP_CHAT_ID`
-instead of the Settings UI.
+group. Both WAHA engine families work — the JS cores and the Go core
+(`gows`, e.g. the `devlikeapro/waha:gows-arm` image), whose group
+lists use Go-style field names. Headless deployments can
+pre-configure the connection with `WAHA_BASE_URL`, `WAHA_API_KEY`,
+`WAHA_SESSION` and `WAHA_GROUP_CHAT_ID` instead of the Settings UI.
 
 ## Technology
 
@@ -115,7 +117,7 @@ the template tournament from the home screen.
 With the dev server running:
 
 ```bash
-bun run scripts/battle-test.ts          # core suite — 127 assertions
+bun run scripts/battle-test.ts          # core suite — 132 assertions
 bun run scripts/waha-mock.ts 3001 &     # mock WAHA server
 BASE_URL=http://localhost:3000 bun run scripts/whatsapp-test.ts
 ```

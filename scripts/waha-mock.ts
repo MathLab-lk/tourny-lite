@@ -6,7 +6,10 @@
 //   GET  /api/{session}/groups
 //   POST /api/sendText
 // Correct API key required via the X-Api-Key header (matching the
-// real server's 401 behaviour). Sent messages land in ./waha-mock.log.
+// real server's 401 behaviour). Groups come back in the gows (Go
+// core — the *-arm images) field shape: { JID, Name, Participants };
+// one group is unnamed to prove the name falls back to its id.
+// Sent messages land in ./waha-mock.log.
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { appendFileSync } from 'node:fs'
@@ -18,9 +21,10 @@ const SESSIONS = [
   { name: 'backup', status: 'STOPPED', engine: { engine: 'GOWS' } },
 ]
 const GROUPS = [
-  { id: '1203630abcdef123456789@g.us', name: 'Math Competition 2026 — Results', participants: [] },
-  { id: '1203630zzzzzz999888777@g.us', name: 'M&E Coordinators', participants: [] },
-  { id: '1203630yyyyyy444555666@g.us', name: 'Family', participants: [] },
+  // gows shape: JID / Name / Participants
+  { JID: '1203630abcdef123456789@g.us', Name: 'Math Competition 2026 — Results', Participants: [] },
+  { JID: '1203630zzzzzz999888777@g.us', Name: 'M&E Coordinators', Participants: [] },
+  { JID: '1203630yyyyyy444555666@g.us', Name: '', Participants: [] },
 ]
 
 function authorized(req: IncomingMessage): boolean {
