@@ -128,7 +128,7 @@ interface AppState {
   sendWhatsApp: (
     kind: 'test' | 'standings' | 'event',
     opts?: { tournamentId?: string; eventId?: string }
-  ) => Promise<{ ok: boolean; groupName?: string; error?: string }>
+  ) => Promise<{ ok: boolean; via?: 'image' | 'text'; groupName?: string; error?: string }>
   addCenters: (centersText: string) => Promise<boolean>
   removeCenter: (centerId: string) => Promise<boolean>
   loadAudit: (tournamentId: string) => Promise<void>
@@ -502,11 +502,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   sendWhatsApp: async (kind, opts) => {
     try {
-      const data = await api<{ ok: boolean; groupName?: string }>('/api/whatsapp/send', {
+      const data = await api<{ ok: boolean; via?: 'image' | 'text'; groupName?: string }>('/api/whatsapp/send', {
         method: 'POST',
         body: JSON.stringify({ kind, ...opts }),
       })
-      return { ok: true, groupName: data.groupName }
+      return { ok: true, via: data.via, groupName: data.groupName }
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : 'The message could not be sent.' }
     }

@@ -116,7 +116,10 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
     })
     setBusy(null)
     if (out.ok) {
-      toast({ title: 'Result shared', description: `Sent to ${out.groupName ?? 'the WhatsApp group'}.` })
+      toast({
+        title: 'Result card shared',
+        description: `${out.via === 'text' ? 'Sent as a text message' : 'Sent as a styled card'} to ${out.groupName ?? 'the WhatsApp group'}.`,
+      })
     } else {
       toast({ title: 'Could not share the result', description: out.error, variant: 'destructive' })
     }

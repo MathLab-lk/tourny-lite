@@ -64,7 +64,7 @@ RUN ./node_modules/.bin/prisma generate && bun run build
 # Stage 4: Minimal runtime container
 # ------------------------------------------------------------------------------
 FROM node:20-alpine AS runner
-RUN apk add --no-cache ca-certificates tzdata openssl wget su-exec \
+RUN apk add --no-cache ca-certificates tzdata openssl wget su-exec fontconfig \
   && addgroup -S app && adduser -S app -G app
 
 ENV TZ=Asia/Colombo
@@ -95,6 +95,13 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/prisma ./prisma
 
 COPY deploy/docker-entrypoint.sh ./docker-entrypoint.sh
+
+# Share-card fonts (Poppins + Noto Sans Sinhala, SIL Open Font License —
+# see public/fonts/). Installed system-wide so fontconfig — which the card
+# renderer's librsvg/pango text stack uses — finds them; the cache is
+# generated here at build time so the runtime never needs to scan.
+COPY --from=builder /app/public/fonts /usr/share/fonts/tourny-lite
+RUN fc-cache -f
 # Fail the build early, with a clear message, if the standalone entrypoint is
 # not where CMD expects it (the build script normalizes the bundle so that
 # server.js always sits at the /app root).

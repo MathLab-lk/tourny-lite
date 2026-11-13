@@ -42,6 +42,15 @@ const CORRECTION: PodiumPlan = {
   by: 'Station 6 — Ms. Rajapaksa',
 }
 
+// Demo center identities — some named, one location-only, the rest
+// code-only, so every view (and the share cards) shows all three
+// styles exactly as they occur in real tournaments.
+const DEMO_CENTERS: Record<string, { centerName?: string; location?: string }> = {
+  '101': { centerName: 'Kaduwela Center', location: 'Colombo' },
+  '103': { centerName: 'Maharagama Center' },
+  '401': { location: 'Kandy' },
+}
+
 async function main() {
   const existing = await db.tournament.findFirst({ where: { templateId: 'math_comp_2026' } })
   if (existing) {
@@ -62,6 +71,10 @@ async function main() {
   console.log(`Created tournament: ${tournament.name} with ${tournament.events.length} events`)
 
   const centerByCode = new Map(tournament.centers.map((c) => [c.centerCode, c]))
+  for (const [code, patch] of Object.entries(DEMO_CENTERS)) {
+    const center = centerByCode.get(code)
+    if (center) await db.center.update({ where: { id: center.id }, data: patch })
+  }
   const findEvent = (p: PodiumPlan) =>
     tournament.events.find(
       (e) => e.division.code === p.division && e.game.code === p.game && e.subEventIndex === p.sub

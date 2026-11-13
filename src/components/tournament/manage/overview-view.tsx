@@ -87,7 +87,10 @@ export function OverviewView() {
     const out = await sendWhatsApp('standings', { tournamentId: activeId })
     setSharing(false)
     if (out.ok) {
-      toast({ title: 'Standings shared', description: `Sent to ${out.groupName ?? 'the WhatsApp group'}.` })
+      toast({
+        title: 'Standings card shared',
+        description: `${out.via === 'text' ? 'Sent as a text message' : 'Sent as a styled card'} to ${out.groupName ?? 'the WhatsApp group'}.`,
+      })
     } else {
       toast({ title: 'Could not share the standings', description: out.error, variant: 'destructive' })
     }

@@ -4,7 +4,9 @@
  * Runs against a live server (BASE_URL) plus the WAHA mock
  * (scripts/waha-mock.ts) and verifies the full chain:
  * auth guard → config save/mask → verify (sessions/groups) →
- * send test/standings/event messages → error mapping.
+ * send test/standings/event → styled card images (with the
+ * plain-text fallback) → auto-share on recorded results →
+ * share-card builder unit checks (escaping, partial podiums).
  *
  * Usage:
  *   bun scripts/waha-mock.ts 3001 &
@@ -54,9 +56,43 @@ class Client {
   }
 }
 
+interface LogEntry {
+  kind?: 'text' | 'image'
+  at: string
+  id: string
+  session: string
+  chatId: string
+  text?: string
+  caption?: string
+  mime?: string
+  filename?: string
+  imageBytes?: number
+}
+
+const { readFileSync, writeFileSync } = await import('node:fs')
+const logPath = new URL('./waha-mock.log', import.meta.url).pathname
+
+/** Starts every run from a clean log so message counts are exact. */
+function resetLog() {
+  writeFileSync(logPath, '')
+}
+
+function readLog(): LogEntry[] {
+  try {
+    return readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .filter((l) => l.startsWith('{')) // tolerate mock stdout noise
+      .map((l) => JSON.parse(l))
+  } catch {
+    return []
+  }
+}
+
 async function main() {
   console.log(`WhatsApp integration test — app ${BASE} · mock ${MOCK}`)
   const admin = new Client()
+  resetLog()
 
   // ═══ 1. Access control ═══
   section('1 · Access control')
@@ -167,7 +203,7 @@ async function main() {
     ok(
       'unnamed group falls back to its id as name',
       withGroups.data.groups?.some((g: any) => g.id === '1203630yyyyyy444555666@g.us' && g.name === g.id),
-      withGroups.data.groups
+      withGroups.data
     )
     ok('session status reported', withGroups.data.session?.status === 'WORKING', withGroups.data.session)
 
@@ -222,7 +258,7 @@ async function main() {
 
   // An event with a partially empty podium — e.g. its gold center was
   // deleted, which nulls that place. Shared too, to prove partial podiums
-  // still render well-formed messages. Chosen in section 6, asserted in 7.
+  // still render well-formed cards. Chosen in section 6, asserted in 7.
   let partialEventId: string | undefined
 
   // ═══ 6. Sending ═══
@@ -246,17 +282,17 @@ async function main() {
     partialEventId = withResult.find((e: any) => e.id !== completedEvent?.id && !fullPodium(e))?.id
 
     const testMsg = await admin.call('POST', '/api/whatsapp/send', { kind: 'test' })
-    ok('test message sends', testMsg.status === 200 && testMsg.data.ok === true, testMsg)
+    ok('test message sends as text', testMsg.status === 200 && testMsg.data.ok === true && testMsg.data.via === 'text', testMsg)
 
     const standings = await admin.call('POST', '/api/whatsapp/send', { kind: 'standings', tournamentId: tid })
-    ok('standings message sends', standings.status === 200, standings)
+    ok('standings sends as a styled card', standings.status === 200 && standings.data.via === 'image', standings)
 
     const event = await admin.call('POST', '/api/whatsapp/send', {
       kind: 'event',
       tournamentId: tid,
       eventId: completedEvent.id,
     })
-    ok('event message sends', event.status === 200, event)
+    ok('event result sends as a styled card', event.status === 200 && event.data.via === 'image', event)
 
     if (partialEventId) {
       const partial = await admin.call('POST', '/api/whatsapp/send', {
@@ -264,7 +300,7 @@ async function main() {
         tournamentId: tid,
         eventId: partialEventId,
       })
-      ok('partial-podium event message sends', partial.status === 200, partial)
+      ok('partial-podium event sends', partial.status === 200, partial)
     }
 
     const badKind = await admin.call('POST', '/api/whatsapp/send', { kind: 'nope' })
@@ -287,101 +323,110 @@ async function main() {
   // ═══ 7. Wire check — what actually arrived at the mock ═══
   section('7 · Delivered payloads (from waha-mock.log)')
   {
-    const { readFileSync } = await import('node:fs')
-    const logPath = new URL('./waha-mock.log', import.meta.url).pathname
-    const lines = readFileSync(logPath, 'utf8')
-      .trim()
-      .split('\n')
-      .filter((l) => l.startsWith('{')) // tolerate mock stdout noise
-      .map((l) => JSON.parse(l))
+    const lines = readLog()
     const expectedCount = 3 + (partialEventId ? 1 : 0)
     ok(`${expectedCount} messages delivered`, lines.length === expectedCount, lines.length)
 
-    const all = lines.map((l) => l.text)
     ok('all sent to the configured group', lines.every((l) => l.chatId === '1203630abcdef123456789@g.us'), lines.map((l) => l.chatId))
     ok('all sent with the configured session', lines.every((l) => l.session === 'default'))
 
-    const testText = all.find((t) => t.includes('connection test'))
+    const testEntry = lines.find((l) => l.kind === 'text')
     ok(
-      'test message well-formed',
-      Boolean(testText?.includes('Tourny Lite') && testText.includes('via Tourny Lite')),
-      testText
+      'test message well-formed text',
+      Boolean(
+        testEntry?.text?.includes('Tourny Lite') &&
+          testEntry.text.includes('connection test') &&
+          testEntry.text.includes('styled cards')
+      ),
+      testEntry?.text
     )
 
-    const standingsText = all.find((t) => t.includes('Standings'))
+    const images = lines.filter((l) => l.kind === 'image')
+    ok('standings + event arrived as images', images.length === 2 + (partialEventId ? 1 : 0), images.length)
     ok(
-      'standings message has bold title, medals, points, stamp',
-      Boolean(
-        standingsText?.includes('*') &&
-          standingsText.includes('🥇') &&
-          standingsText.includes('pts') &&
-          standingsText.includes('events completed') &&
-          standingsText.includes('🥈')
-      ),
-      standingsText
+      'images are real JPEGs with sane size',
+      images.every((l) => l.mime === 'image/jpeg' && (l.imageBytes ?? 0) > 10_000),
+      images.map((l) => [l.mime, l.imageBytes])
     )
     ok(
-      'standings message has rule, progress line and footer',
-      Boolean(
-        standingsText?.includes('━━') &&
-          standingsText.includes('✅') &&
-          standingsText.includes('via Tourny Lite')
-      ),
-      standingsText
+      'image filenames are .jpg',
+      images.every((l) => (l.filename ?? '').endsWith('.jpg')),
+      images.map((l) => l.filename)
     )
     ok(
-      'standings omit scoreless centers',
-      Boolean(standingsText),
-      standingsText
+      'no misspelled "Baugunaka" anywhere (typo regression)',
+      !lines.some((l) => (l.text ?? l.caption ?? '').includes('Baugunaka')),
+      lines.map((l) => l.caption)
     )
 
-    const eventText = all.find((t) => t.includes('Cat') && t.includes('🥇') && !t.includes('Standings'))
+    const standingsImg = images.find((l) => (l.caption ?? '').includes('Standings') || (l.caption ?? '').includes('standings'))
     ok(
-      'event message has game, division, podium, points',
-      Boolean(
-        eventText &&
-          eventText.includes('*') &&
-          eventText.includes('Cat') &&
-          eventText.includes('🥇') &&
-          eventText.includes('75 pts') &&
-          eventText.includes('50 pts') &&
-          eventText.includes('25 pts')
-      ),
-      eventText
-    )
-    ok(
-      'event message branded with header, table line and footer',
-      Boolean(
-        eventText?.includes('Event result') &&
-          eventText.includes('📊 Table:') &&
-          eventText.includes('━━') &&
-          eventText.includes('via Tourny Lite')
-      ),
-      eventText
+      'standings caption names the tournament + progress',
+      Boolean(standingsImg?.caption?.includes('Math Competition 2026') && /of 39 events/.test(standingsImg.caption)),
+      standingsImg?.caption
     )
 
-    let partialText: string | undefined
-    if (partialEventId) {
-      partialText = all.find((t) => t.includes('Cat') && !t.includes('🥇') && !t.includes('Standings'))
-      ok(
-        'partial podium renders without the missing gold',
-        Boolean(
-          partialText &&
-            (partialText.includes('🥈') || partialText.includes('🥉')) &&
-            partialText.includes('pts')
-        ),
-        partialText
-      )
-    }
+    const eventImg = images.find((l) => (l.caption ?? '').includes('Event result'))
+    ok(
+      'event caption names tournament, game and category',
+      Boolean(
+        eventImg?.caption?.includes('Math Competition 2026') &&
+          eventImg.caption.includes('Cat ') &&
+          /\d{3}/.test(eventImg.caption)
+      ),
+      eventImg?.caption
+    )
+  }
 
-    console.log('\n── standings message ──')
-    console.log(standingsText)
-    console.log('── event message ──')
-    console.log(eventText)
-    if (partialText) {
-      console.log('── partial-podium event message ──')
-      console.log(partialText)
-    }
+  // ═══ 7b. Text fallback — when sendImage fails ═══
+  section('7b · Text fallback (sendImage fails)')
+  {
+    // Inject one failure for sendImage; the app must fall back to the
+    // equivalent text message — the group still hears the result.
+    const inject = await fetch(`${MOCK}/__mock/fail`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': MOCK_KEY },
+      body: JSON.stringify({ path: '/api/sendImage', times: 1, status: 500 }),
+    })
+    ok('failure injected', inject.status === 200, await inject.text().catch(() => ''))
+
+    const tournaments = await admin.call('GET', '/api/tournaments')
+    const seeded = tournaments.data.tournaments?.find((t: any) => t.templateId || t.name.includes('Math Competition'))
+    const detail = await admin.call('GET', `/api/tournaments/${seeded.id}`)
+    const done = detail.data.events?.find(
+      (e: any) => e.status === 'completed' && e.result?.firstPlaceCenterId && e.result?.secondPlaceCenterId && e.result?.thirdPlaceCenterId
+    )
+
+    const before = readLog().length
+    const fallback = await admin.call('POST', '/api/whatsapp/send', {
+      kind: 'event',
+      tournamentId: seeded.id,
+      eventId: done.id,
+    })
+    ok('send succeeds via text fallback', fallback.status === 200 && fallback.data.via === 'text', fallback)
+
+    const lines = readLog()
+    ok('exactly one message delivered (the fallback)', lines.length === before + 1, lines.length - before)
+    const text = lines[lines.length - 1]
+    ok('fallback is a text message', text.kind === 'text', text)
+    ok(
+      'fallback text is the branded event announcement',
+      Boolean(
+        text.text?.includes('Event result') &&
+          text.text.includes('🥇') &&
+          text.text.includes('pts') &&
+          text.text.includes('via Tourny Lite') &&
+          text.text.includes('Overall standings:')
+      ),
+      text.text
+    )
+
+    // Clean send again — images are back.
+    const again = await admin.call('POST', '/api/whatsapp/send', {
+      kind: 'standings',
+      tournamentId: seeded.id,
+    })
+    ok('recovers to image after the failure', again.status === 200 && again.data.via === 'image', again)
   }
 
   // ═══ 8. Saved-key reuse (no retyping) ═══
@@ -405,14 +450,6 @@ async function main() {
   // ═══ 9. Auto-share on recorded results ═══
   section('9 · Auto-share on recorded results')
   {
-    const { readFileSync } = await import('node:fs')
-    const logPath = new URL('./waha-mock.log', import.meta.url).pathname
-    const readLog = (): { at: string; id: string; session: string; chatId: string; text: string }[] =>
-      readFileSync(logPath, 'utf8')
-        .trim()
-        .split('\n')
-        .filter((l) => l.startsWith('{'))
-        .map((l) => JSON.parse(l))
     const waitFor = async (cond: () => boolean, ms = 5000): Promise<boolean> => {
       const deadline = Date.now() + ms
       while (Date.now() < deadline) {
@@ -435,7 +472,7 @@ async function main() {
     ok('minimal patch keeps the connection', enable.data.configured === true && enable.data.baseUrl === MOCK && Boolean(enable.data.groupChatId), enable.data)
     ok('minimal patch keeps the session', enable.data.session === 'default', enable.data.session)
 
-    // A recorded result → one announcement in the group.
+    // A recorded result → one styled card in the group.
     const before = readLog().length
     const record = await admin.call('POST', '/api/results', {
       eventId: open.id,
@@ -451,14 +488,14 @@ async function main() {
       return lines.length === before + 1
     })
     ok('new result auto-shared', arrived, lines.length - before)
-    const autoText = lines[lines.length - 1]?.text ?? ''
+    const autoMsg = lines[lines.length - 1]
     ok(
-      'auto message is the branded event podium',
-      autoText.includes('Event result') && autoText.includes('🥇') && autoText.includes('pts') && autoText.includes('via Tourny Lite'),
-      autoText
+      'auto-share delivers the styled event card',
+      autoMsg.kind === 'image' && (autoMsg.caption ?? '').includes('Event result') && (autoMsg.imageBytes ?? 0) > 10_000,
+      autoMsg
     )
 
-    // A correction → a clearly labeled follow-up.
+    // A correction → a clearly labeled follow-up card.
     const before2 = readLog().length
     const corrected = await admin.call('POST', '/api/results', {
       eventId: open.id,
@@ -473,10 +510,11 @@ async function main() {
       return lines.length === before2 + 1
     })
     ok('correction auto-shared', arrived2, lines.length - before2)
+    const corrMsg = lines[lines.length - 1]
     ok(
-      'correction clearly labeled',
-      (lines[lines.length - 1]?.text ?? '').includes('Corrected result'),
-      lines[lines.length - 1]?.text
+      'correction clearly labeled on the card caption',
+      corrMsg.kind === 'image' && (corrMsg.caption ?? '').includes('Corrected result'),
+      corrMsg.caption
     )
 
     // Disabled → recording stays silent.
@@ -494,6 +532,154 @@ async function main() {
     ok('result recorded with auto-share off', silent.status === 201, silent)
     await new Promise((r) => setTimeout(r, 1500))
     ok('no message sent while disabled', readLog().length === before3, readLog().length - before3)
+  }
+
+  // ═══ 10. Share-card builder unit checks ═══
+  section('10 · Share-card builders (synthetic data)')
+  {
+    const { buildEventCard, buildStandingsCard } = await import('../src/lib/share-card')
+
+    const center = (code: string, name: string) => ({
+      id: `c-${code}`,
+      centerCode: code,
+      centerName: name,
+      location: '',
+    })
+    const mkDetail = (overrides: Partial<any> = {}): any => ({
+      tournament: {
+        id: 't1',
+        name: 'Math Competition 2026',
+        slug: 'mc26',
+        organizer: 'Seed Ministries',
+        status: 'active',
+        pointsFirst: 75,
+        pointsSecond: 50,
+        pointsThird: 25,
+        templateId: 'x',
+        createdAt: '',
+        updatedAt: '',
+      },
+      divisions: [
+        { id: 'd1', code: 'B', name: 'Category B', ageRange: '9 to 10', gradeRange: '4, 5', participantQuota: 5, displayOrder: 1 },
+      ],
+      games: [],
+      centers: [center('105', ''), center('101', 'Kaduwela Center')],
+      events: [
+        {
+          id: 'e1',
+          divisionId: 'd1',
+          gameId: 'g1',
+          divisionCode: 'B',
+          gameCode: 'baugunaka-puwaruwa',
+          gameName: 'Bahugunaka Puwaruwa',
+          gameSinhalaName: 'බහුගුණක පුවරුව',
+          subEventIndex: 2,
+          label: 'Category B · Bahugunaka Puwaruwa · #2',
+          status: 'completed',
+          result: {
+            id: 'r1',
+            eventId: 'e1',
+            firstPlaceCenterId: 'c-101',
+            secondPlaceCenterId: 'c-105',
+            thirdPlaceCenterId: null,
+            firstPlaceCode: '101',
+            secondPlaceCode: '105',
+            thirdPlaceCode: null,
+            recordedBy: 'Judge',
+            notes: '',
+            recordedAt: '',
+            updatedAt: '',
+          },
+        },
+      ],
+      standings: [
+        { rank: 1, centerId: 'c-101', centerCode: '101', centerName: 'Kaduwela Center', gold: 1, silver: 0, bronze: 0, total: 75 },
+        { rank: 2, centerId: 'c-105', centerCode: '105', centerName: '', gold: 0, silver: 1, bronze: 0, total: 50 },
+      ],
+      progress: { total: 39, completed: 3, inProgress: 1, pending: 35, percent: 8 },
+      ...overrides,
+    })
+
+    const card = buildEventCard(mkDetail(), 'e1')
+    ok('event card builds for a partial podium (2 places)', Boolean(card?.svg), card)
+    ok(
+      'event card carries the corrected game name, Sinhala subtitle, chips',
+      Boolean(
+        card?.svg.includes('Bahugunaka Puwaruwa') &&
+          card.svg.includes('බහුගුණක පුවරුව') &&
+          card.svg.includes('Category B') &&
+          card.svg.includes('Ages 9 to 10') &&
+          card.svg.includes('Slot 2')
+      ),
+      card?.caption
+    )
+    ok(
+      'event card names medalists with named + unnamed centers',
+      Boolean(card?.svg.includes('Kaduwela Center') && card.svg.includes('>105<')),
+      card?.svg?.slice(0, 400)
+    )
+    ok('event card caption mentions the game and category', Boolean(card?.caption.includes('Bahugunaka Puwaruwa') && card.caption.includes('Cat B')), card?.caption)
+    ok('event card contains no un-escaped raw & from SVG syntax inside text', !card?.svg.includes('>Math Competition 2026 &'), card?.svg)
+
+    const nasty = mkDetail()
+    nasty.events[0].gameName = 'A & B "Quotes" <Tag>'
+    const nastyCard = buildEventCard(nasty, 'e1')
+    ok(
+      'XML-special characters are escaped',
+      Boolean(
+        nastyCard?.svg.includes('A &amp; B &quot;Quotes&quot; &lt;Tag&gt;') &&
+          !nastyCard.svg.includes('A & B "Quotes" <Tag>')
+      ),
+      'escape check'
+    )
+
+    const long = mkDetail()
+    long.events[0].gameName = 'An Extremely Long Game Name That Definitely Cannot Fit On One Line Even When Shrunk'
+    const longCard = buildEventCard(long, 'e1')
+    ok('very long game names are truncated with an ellipsis', Boolean(longCard?.svg.includes('…')), longCard?.caption)
+
+    const noResult = mkDetail()
+    noResult.events[0].result = null
+    ok('event without a result builds no card (text path answers)', buildEventCard(noResult, 'e1') === null)
+
+    const noPlaces = mkDetail()
+    noPlaces.events[0].result = { ...noPlaces.events[0].result, firstPlaceCode: null, secondPlaceCode: null }
+    ok('zero-place result builds no card (text path answers)', buildEventCard(noPlaces, 'e1') === null)
+
+    const correction = buildEventCard(mkDetail(), 'e1', { isCorrection: true })
+    ok('correction card is labelled', Boolean(correction?.svg.includes('CORRECTED RESULT') && correction.caption.includes('Corrected result')), correction?.caption)
+
+    const standings = buildStandingsCard(mkDetail())
+    ok('standings card builds', Boolean(standings?.svg), standings)
+    ok(
+      'standings card shows ranks, named and unnamed centers',
+      Boolean(standings?.svg.includes('Kaduwela Center') && standings.svg.includes('>105<') && standings.svg.includes('TOURNY LITE')),
+      standings?.caption
+    )
+
+    // 12 scored centers → capped at 10 + "and 2 more centers below"
+    const many = mkDetail()
+    many.standings = Array.from({ length: 12 }, (_, i) => ({
+      rank: i + 1,
+      centerId: `c-${i}`,
+      centerCode: `1${String(i).padStart(2, '0')}`,
+      centerName: '',
+      gold: 0,
+      silver: 0,
+      bronze: 0,
+      total: 100 - i,
+    }))
+    const capped = buildStandingsCard(many)
+    ok('standings card caps at 10 rows and mentions the rest', Boolean(capped?.svg.includes('and 2 more centers below')), capped?.caption)
+
+    const empty = mkDetail()
+    empty.standings = []
+    ok('standings card with nothing scored builds none (text path answers)', buildStandingsCard(empty) === null)
+
+    console.log('\n── event card caption ──')
+    console.log(card?.caption)
+    console.log('── standings card caption ──')
+    console.log(standings?.caption)
   }
 
   console.log('\n════════════════════════════════════════════════════════════')

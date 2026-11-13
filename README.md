@@ -85,17 +85,21 @@ Share results to a WhatsApp group through a self-hosted
    standings; *Share* inside any recorded event sends that podium
    (medals, centers and points).
 
-Messages are formatted as clean broadcasts — a bold title, a rule, the
-podium or standings in bold with medal ranks, a compact top-of-the-table
-line on event announcements, and a progress + timestamp footer — so the
-group feed reads like a professional results service.
+Broadcasts go out as **styled share cards** — rendered images in the
+app's own design language (emerald masthead, medal coins, progress
+bar), typeset with real font shaping so the Sinhala game names render
+correctly, sent as JPEG with a short caption via WAHA's `sendImage`.
+If a card cannot be rendered or delivered (missing fonts, an engine
+without `sendImage`, a flaky server), the equivalent plain-text
+announcement is sent instead, so the group always hears the result.
 
 **Auto-share:** once the connection is saved, *Auto-share new results*
-(Settings) sends the event announcement automatically the moment a
-result is recorded — and a clearly labeled *Corrected result* follow-up
-whenever one is corrected. Sharing happens after the save, so a slow
-WhatsApp server never delays the scorekeeper, and a failed share never
-disturbs result recording (it is logged server-side instead).
+(Settings) sends the event card automatically the moment a result is
+recorded — and a clearly labeled *Corrected result* card whenever one
+is corrected. Sharing happens after the save, so a slow WhatsApp
+server never delays the scorekeeper, and a failed share never
+disturbs result recording (it falls back to text, and failures are
+logged server-side instead).
 
 The connected WhatsApp account must be a member of the destination
 group. Both WAHA engine families work — the JS cores and the Go core
@@ -104,6 +108,15 @@ lists use Go-style field names. Headless deployments can
 pre-configure the connection with `WAHA_BASE_URL`, `WAHA_API_KEY`,
 `WAHA_SESSION`, `WAHA_GROUP_CHAT_ID` and `WAHA_AUTO_EVENTS` instead of
 the Settings UI.
+
+**Card fonts (local development only):** the cards are typeset with
+Poppins + Noto Sans Sinhala, which live in `public/fonts/`. The
+Docker image installs them for fontconfig automatically; for local
+development, make them visible once:
+
+```bash
+mkdir -p ~/.fonts && cp public/fonts/*.ttf ~/.fonts/ && fc-cache -f ~/.fonts
+```
 
 ## Technology
 
@@ -143,11 +156,14 @@ account management.
 
 The WhatsApp suite covers access control on every endpoint, config
 save/masking, session + group discovery, all three message kinds
-(delivered payloads are inspected), error mapping for wrong keys,
-unreachable servers and unrecorded events, and the auto-share flow —
-enable via minimal patch, record → announce, correct → labeled
-follow-up, disable → silence — against the bundled WAHA mock, so no
-real group is messaged while testing.
+(delivered payloads are inspected — image cards for standings and
+events, text for the probe, the plain-text fallback when `sendImage`
+fails), error mapping for wrong keys, unreachable servers and
+unrecorded events, auto-share — enable via minimal patch, record →
+announce, correct → labeled follow-up, disable → silence — and the
+share-card builders themselves (escaping, partial podiums, name
+fitting), against the bundled WAHA mock, so no real group is messaged
+while testing.
 
 ## Deployment
 

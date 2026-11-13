@@ -1,5 +1,10 @@
 import { db } from '@/lib/db'
 import { getTournamentDetail } from '@/lib/tournament-service'
+import {
+  buildEventCard,
+  buildStandingsCard,
+  renderCardJpeg,
+} from '@/lib/share-card'
 import type { EventDTO, TournamentDetailDTO } from '@/lib/types'
 
 // ─────────────────────────────────────────────────────────────
@@ -10,14 +15,18 @@ import type { EventDTO, TournamentDetailDTO } from '@/lib/types'
 //   GET  /api/sessions          → [{ name, status, ... }]
 //   GET  /api/{session}/groups  → groups the account belongs to
 //   POST /api/sendText          → { session, chatId, text }
+//   POST /api/sendImage         → { session, chatId, file, caption }
 // Every request carries the `X-Api-Key` header when a key is set.
 // Engines name the group fields differently — the JS cores return
 // { id, name }, the Go core (gows, e.g. the *-arm images) returns
 // { JID, Name }; `subject` covers older cores. All three are read.
 //
-// The connection is configured by the administrator in Settings
-// (stored in the AppSetting table); environment variables act as
-// a headless fallback when nothing has been saved yet.
+// Broadcasts go out as styled share cards (rendered images, see
+// share-card.ts); the plain-text messages below are the fallback
+// when a card cannot be rendered or delivered. The connection is
+// configured by the administrator in Settings (stored in the
+// AppSetting table); environment variables act as a headless
+// fallback when nothing has been saved yet.
 // ─────────────────────────────────────────────────────────────
 
 export interface WhatsAppConfig {
@@ -256,24 +265,37 @@ export async function sendWhatsAppText(cfg: WhatsAppConfig, text: string): Promi
   })
 }
 
-// ── message builders ──────────────────────────────────────────
-// WhatsApp text formatting: *bold*, _italic_; a repeated ━ renders
-// as a continuous rule. Messages share one layout so the group feed
-// reads like a branded broadcast: title block, rule, body, rule,
-// progress line and an italic stamp footer.
-
-const MEDALS = ['🥇', '🥈', '🥉'] as const
-const RULE = '━━━━━━━━━━━━━━━'
-
-function shareStamp(): string {
-  return new Date().toLocaleString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+/** Sends an image (JPEG buffer) with a short caption to the group.
+ *  WAHA's sendImage carries the file base64-encoded in `file.data`
+ *  — JPEG is WhatsApp's recommended format for image delivery. */
+export async function sendWhatsAppImage(
+  cfg: WhatsAppConfig,
+  jpeg: Buffer,
+  caption: string
+): Promise<void> {
+  await wahaRequest(cfg, '/api/sendImage', {
+    method: 'POST',
+    body: {
+      session: cfg.session,
+      chatId: cfg.groupChatId,
+      file: {
+        mimetype: 'image/jpeg',
+        filename: 'tourny-lite.jpg',
+        data: jpeg.toString('base64'),
+      },
+      caption,
+    },
   })
 }
+
+// ── text messages (the card fallback) ─────────────────────────
+// WhatsApp text formatting: *bold*, _italic_. The styled share
+// cards are the primary broadcast; these plain-text versions go
+// out only when a card cannot be rendered or delivered, so they
+// stay deliberately clean — clear hierarchy, no rules, no machine
+// stamps (WhatsApp already timestamps every message).
+
+const MEDALS = ['🥇', '🥈', '🥉'] as const
 
 function centerLabel(row: { centerCode: string; centerName: string }): string {
   return row.centerName ? `${row.centerName} (${row.centerCode})` : row.centerCode
@@ -282,9 +304,9 @@ function centerLabel(row: { centerCode: string; centerName: string }): string {
 function footer(detail: TournamentDetailDTO): string[] {
   const { progress } = detail
   return [
-    RULE,
+    '',
     `✅ ${progress.completed} of ${progress.total} events completed`,
-    `_${shareStamp()} · via Tourny Lite_`,
+    '_via Tourny Lite_',
   ]
 }
 
@@ -307,19 +329,17 @@ export function buildStandingsMessage(detail: TournamentDetailDTO): string {
   return render([
     `🏆 *${tournament.name}* — Standings`,
     tournament.organizer ? `_by ${tournament.organizer}_` : null,
-    RULE,
     '',
     ...lines,
-    '',
     ...footer(detail),
   ])
 }
 
-/** Compact top-of-the-table line for event messages: codes only. */
+/** Compact overall-top-3 line for event messages: codes only. */
 function tableLine(detail: TournamentDetailDTO): string | null {
   const top = detail.standings.filter((r) => r.total > 0).slice(0, 3)
   if (top.length === 0) return null
-  return `📊 Table: ${top.map((r, i) => `${i + 1}. ${r.centerCode} (${r.total})`).join(' · ')}`
+  return `📊 *Overall standings:* ${top.map((r, i) => `${i + 1}. ${r.centerCode} (${r.total})`).join(' · ')}`
 }
 
 /** Single event podium — the "event result" announcement. */
@@ -338,8 +358,8 @@ export function buildEventMessage(
 
   const division = divisions.find((d) => d.code === event.divisionCode)
   const divisionLine = division
-    ? `Cat ${division.code}${division.ageRange ? ` · ${division.ageRange}` : ''}`
-    : `Cat ${event.divisionCode}`
+    ? `${division.name}${division.ageRange ? ` · Ages ${division.ageRange}` : ''}`
+    : `Category ${event.divisionCode}`
   const nameByCode = new Map(centers.map((c) => [c.centerCode, c]))
 
   const places: { medal: string; code: string; pts: number }[] = []
@@ -363,8 +383,8 @@ export function buildEventMessage(
     `${opts?.isCorrection ? '🔁' : '🏁'} *${tournament.name}* — ${
       opts?.isCorrection ? 'Corrected result' : 'Event result'
     }`,
-    RULE,
-    `*${event.gameName}*${event.gameSinhalaName ? ` — _${event.gameSinhalaName}_` : ''}`,
+    '',
+    `*${event.gameName}*${event.gameSinhalaName ? ` · _${event.gameSinhalaName}_` : ''}`,
     `${divisionLine}${event.subEventIndex > 1 ? ` · Slot ${event.subEventIndex}` : ''}`,
     '',
     ...lines,
@@ -378,17 +398,69 @@ export function buildEventMessage(
 export function buildTestMessage(): string {
   return render([
     '✅ *Tourny Lite* — connection test',
-    RULE,
-    'Your WhatsApp connection is working.',
-    'Event results and standings will be shared in this group.',
     '',
-    `_${shareStamp()} · via Tourny Lite_`,
+    'Your WhatsApp connection is working.',
+    'Event results and standings will be shared in this group as styled cards.',
+    '',
+    '_via Tourny Lite_',
   ])
 }
 
-// ── auto-share on recorded results ───────────────────────────
+// ── share flows: card first, text fallback ────────────────────
+// Every broadcast tries the styled card image first. If rendering
+// or delivery fails (missing fonts, an engine without sendImage, a
+// flaky server), the equivalent text message goes out instead —
+// the group always hears the result. Returns how it was delivered.
 
-/** Sends the event message automatically after a result is recorded
+export type ShareVia = 'image' | 'text'
+
+async function deliverCard(
+  cfg: WhatsAppConfig,
+  card: { svg: string; caption: string } | null
+): Promise<ShareVia | null> {
+  if (!card) return null
+  try {
+    const jpeg = await renderCardJpeg(card.svg)
+    await sendWhatsAppImage(cfg, jpeg, card.caption)
+    return 'image'
+  } catch (err) {
+    console.error(
+      '[whatsapp] card delivery failed, falling back to text:',
+      err instanceof Error ? err.message : err
+    )
+    return null
+  }
+}
+
+/** Shares one event podium — the styled card, or the text announcement. */
+export async function shareEventResult(
+  cfg: WhatsAppConfig,
+  detail: TournamentDetailDTO,
+  eventId: string,
+  opts?: { isCorrection?: boolean }
+): Promise<ShareVia> {
+  const via = await deliverCard(cfg, buildEventCard(detail, eventId, opts))
+  if (via) return via
+  // buildEventMessage throws the right client error when there is
+  // genuinely nothing to share (no result, no places).
+  await sendWhatsAppText(cfg, buildEventMessage(detail, eventId, opts))
+  return 'text'
+}
+
+/** Shares the overall standings — the styled card, or the text list. */
+export async function shareStandings(
+  cfg: WhatsAppConfig,
+  detail: TournamentDetailDTO
+): Promise<ShareVia> {
+  const via = await deliverCard(cfg, buildStandingsCard(detail))
+  if (via) return via
+  await sendWhatsAppText(cfg, buildStandingsMessage(detail))
+  return 'text'
+}
+
+// ── auto-share on recorded results ────────────────────────────
+
+/** Sends the event announcement automatically after a result is recorded
  *  (or corrected). Runs after the HTTP response, never blocks the
  *  scorekeeper, and swallows its own errors — a failed share must
  *  never disturb result recording. */
@@ -402,7 +474,7 @@ export async function autoShareEventResult(
     if (!cfg?.autoEvents) return
     const detail = await getTournamentDetail(tournamentId)
     if (!detail) return
-    await sendWhatsAppText(cfg, buildEventMessage(detail, eventId, opts))
+    await shareEventResult(cfg, detail, eventId, opts)
   } catch (err) {
     console.error(
       '[whatsapp] auto-share failed:',

@@ -55,19 +55,19 @@ export const MATH_COMP_2026_PRESET: TournamentPreset = {
     { code: 'thai-dham', englishName: 'Thai Dham', sinhalaName: 'තායි දාම්', rulesSummary: 'Thai-dam checkers variant on 8x8 board.' },
     { code: 'tri-omino', englishName: 'Tri Omino', sinhalaName: '', rulesSummary: 'Triangular domino tile-matching game.' },
     { code: 'domino', englishName: 'Domino', sinhalaName: 'ඩොමිනෝ', rulesSummary: 'Classic double-six domino matching.' },
-    { code: 'baugunaka-puwaruwa', englishName: 'Baugunaka Puwaruwa', sinhalaName: 'බහුගුණක පුවරුව', rulesSummary: 'Multiplication-board arithmetic race.' },
+    { code: 'baugunaka-puwaruwa', englishName: 'Bahugunaka Puwaruwa', sinhalaName: 'බහුගුණක පුවරුව', rulesSummary: 'Multiplication-board arithmetic race.' },
     { code: 'card', englishName: 'Card', sinhalaName: 'ගණිත කාඩ්', rulesSummary: 'Math card draw-and-solve speed round.' },
   ],
   eventCounts: {
-    // Cat A: Domino 3, Baugunaka Puwaruwa 2, Card 3 → 8
+    // Cat A: Domino 3, Bahugunaka Puwaruwa 2, Card 3 → 8
     A: { domino: 3, 'baugunaka-puwaruwa': 2, card: 3 },
-    // Cat B: Niranchi 2, Tri Omino 2, Baugunaka Puwaruwa 2, Card 2 → 8
+    // Cat B: Niranchi 2, Tri Omino 2, Bahugunaka Puwaruwa 2, Card 2 → 8
     B: { niranchi: 2, 'tri-omino': 2, 'baugunaka-puwaruwa': 2, card: 2 },
-    // Cat C: Carrom 2, Domino 2, Baugunaka Puwaruwa 2, Card 2 → 8
+    // Cat C: Carrom 2, Domino 2, Bahugunaka Puwaruwa 2, Card 2 → 8
     C: { carrom: 2, domino: 2, 'baugunaka-puwaruwa': 2, card: 2 },
     // Cat D: Thai Dham 3, Card 3 → 6
     D: { 'thai-dham': 3, card: 3 },
-    // Cat E: Niranchi 1, Carrom 2, Thai Dham 1, Tri Omino 1, Domino 1, Baugunaka Puwaruwa 1, Card 2 → 9
+    // Cat E: Niranchi 1, Carrom 2, Thai Dham 1, Tri Omino 1, Domino 1, Bahugunaka Puwaruwa 1, Card 2 → 9
     E: {
       niranchi: 1,
       carrom: 2,

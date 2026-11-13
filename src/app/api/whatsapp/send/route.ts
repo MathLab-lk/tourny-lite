@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import { getTournamentDetail } from '@/lib/tournament-service'
 import {
-  buildEventMessage,
-  buildStandingsMessage,
   buildTestMessage,
   getWhatsAppConfig,
   sendWhatsAppText,
+  shareEventResult,
+  shareStandings,
   WahaError,
 } from '@/lib/whatsapp'
 
@@ -14,7 +14,8 @@ type SendKind = 'test' | 'standings' | 'event'
 
 /**
  * Administrator only: sends a message to the configured WhatsApp
- * group through WAHA.
+ * group through WAHA. Standings and event podiums go out as styled
+ * share cards (images), falling back to plain text automatically.
  *
  *   { kind: 'test' }                            — connectivity probe
  *   { kind: 'standings', tournamentId }          — overall standings
@@ -39,21 +40,21 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    let text: string
+    let via: 'image' | 'text'
     if (kind === 'test') {
-      text = buildTestMessage()
+      await sendWhatsAppText(cfg, buildTestMessage())
+      via = 'text'
     } else if (kind === 'standings') {
       const detail = await getTournamentDetail(String(body.tournamentId ?? ''))
       if (!detail) return NextResponse.json({ error: 'Tournament not found.' }, { status: 404 })
-      text = buildStandingsMessage(detail)
+      via = await shareStandings(cfg, detail)
     } else {
       const detail = await getTournamentDetail(String(body.tournamentId ?? ''))
       if (!detail) return NextResponse.json({ error: 'Tournament not found.' }, { status: 404 })
-      text = buildEventMessage(detail, String(body.eventId ?? ''))
+      via = await shareEventResult(cfg, detail, String(body.eventId ?? ''))
     }
 
-    await sendWhatsAppText(cfg, text)
-    return NextResponse.json({ ok: true, groupName: cfg.groupName || cfg.groupChatId })
+    return NextResponse.json({ ok: true, via, groupName: cfg.groupName || cfg.groupChatId })
   } catch (err) {
     const { message, status } =
       err instanceof WahaError
