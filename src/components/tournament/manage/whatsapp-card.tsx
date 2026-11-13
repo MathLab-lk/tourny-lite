@@ -1,11 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, MessageCircle, PlugZap, Save } from 'lucide-react'
+import { Loader2, MessageCircle, PlugZap, Save, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -32,6 +33,7 @@ interface PublicConfig {
   session: string
   groupChatId: string
   groupName: string
+  autoEvents: boolean
   apiKeySet: boolean
   apiKeyHint: string
 }
@@ -233,6 +235,27 @@ export function WhatsAppCard() {
     }
   }
 
+  // ── auto-share toggle (a partial PATCH — only this field) ────
+  const toggleAuto = async (on: boolean) => {
+    if (!saved) return
+    const before = saved
+    setSaved({ ...saved, autoEvents: on }) // optimistic
+    try {
+      const cfg = await jsonFetch<PublicConfig>('/api/whatsapp/config', {
+        method: 'PUT',
+        body: JSON.stringify({ autoEvents: on }),
+      })
+      setSaved(cfg)
+    } catch (err) {
+      setSaved(before)
+      toast({
+        title: 'Could not change auto-share',
+        description: err instanceof Error ? err.message : undefined,
+        variant: 'destructive',
+      })
+    }
+  }
+
   const meta = sessionStatus ? sessionMeta(sessionStatus) : null
 
   // The group picker's state, in words — never claims "Loading"
@@ -376,6 +399,29 @@ export function WhatsAppCard() {
             </Button>
           ) : null}
         </div>
+
+        {/* Auto-share — once the connection is saved */}
+        {saved?.configured ? (
+          <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+            <div className="space-y-1">
+              <Label htmlFor="wa-auto" className="flex items-center gap-1.5 text-sm font-medium">
+                <Zap className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                Auto-share new results
+              </Label>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Every recorded podium — and any correction — is sent to
+                {' '}{saved.groupName || 'the group'} automatically, the moment it is saved.
+              </p>
+            </div>
+            <Switch
+              id="wa-auto"
+              checked={saved.autoEvents}
+              onCheckedChange={(v) => void toggleAuto(v)}
+              disabled={busy !== null}
+              aria-label="Auto-share new results to the WhatsApp group"
+            />
+          </div>
+        ) : null}
 
         {saved?.configured ? (
           <p className="text-xs text-muted-foreground">

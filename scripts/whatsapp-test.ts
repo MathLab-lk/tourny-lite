@@ -211,6 +211,7 @@ async function main() {
       groupName: 'Math Competition 2026 — Results',
     })
     ok('saves the connection', save.status === 200 && save.data.configured === true, save)
+    ok('auto-share defaults to off', save.data.autoEvents === false, save.data)
 
     ok('key masked in response', save.data.apiKeySet === true && /^\S{3}…\S{2}$/.test(save.data.apiKeyHint ?? '') && !save.data.apiKey, save.data)
 
@@ -301,7 +302,11 @@ async function main() {
     ok('all sent with the configured session', lines.every((l) => l.session === 'default'))
 
     const testText = all.find((t) => t.includes('connection test'))
-    ok('test message well-formed', Boolean(testText?.includes('Tourny Lite')), testText)
+    ok(
+      'test message well-formed',
+      Boolean(testText?.includes('Tourny Lite') && testText.includes('via Tourny Lite')),
+      testText
+    )
 
     const standingsText = all.find((t) => t.includes('Standings'))
     ok(
@@ -312,6 +317,15 @@ async function main() {
           standingsText.includes('pts') &&
           standingsText.includes('events completed') &&
           standingsText.includes('🥈')
+      ),
+      standingsText
+    )
+    ok(
+      'standings message has rule, progress line and footer',
+      Boolean(
+        standingsText?.includes('━━') &&
+          standingsText.includes('✅') &&
+          standingsText.includes('via Tourny Lite')
       ),
       standingsText
     )
@@ -332,6 +346,16 @@ async function main() {
           eventText.includes('75 pts') &&
           eventText.includes('50 pts') &&
           eventText.includes('25 pts')
+      ),
+      eventText
+    )
+    ok(
+      'event message branded with header, table line and footer',
+      Boolean(
+        eventText?.includes('Event result') &&
+          eventText.includes('📊 Table:') &&
+          eventText.includes('━━') &&
+          eventText.includes('via Tourny Lite')
       ),
       eventText
     )
@@ -376,6 +400,100 @@ async function main() {
 
     const verifyOld = await admin.call('POST', '/api/whatsapp/verify', { baseUrl: MOCK, apiKey: 'wrong-again' })
     ok('a freshly typed wrong key still rejected', verifyOld.status === 502, verifyOld)
+  }
+
+  // ═══ 9. Auto-share on recorded results ═══
+  section('9 · Auto-share on recorded results')
+  {
+    const { readFileSync } = await import('node:fs')
+    const logPath = new URL('./waha-mock.log', import.meta.url).pathname
+    const readLog = (): { at: string; id: string; session: string; chatId: string; text: string }[] =>
+      readFileSync(logPath, 'utf8')
+        .trim()
+        .split('\n')
+        .filter((l) => l.startsWith('{'))
+        .map((l) => JSON.parse(l))
+    const waitFor = async (cond: () => boolean, ms = 5000): Promise<boolean> => {
+      const deadline = Date.now() + ms
+      while (Date.now() < deadline) {
+        if (cond()) return true
+        await new Promise((r) => setTimeout(r, 200))
+      }
+      return cond()
+    }
+
+    const tournaments = await admin.call('GET', '/api/tournaments')
+    const seeded = tournaments.data.tournaments?.find((t: any) => t.templateId || t.name.includes('Math Competition'))
+    const detail = await admin.call('GET', `/api/tournaments/${seeded.id}`)
+    const centers = detail.data.centers ?? []
+    const open = detail.data.events?.find((e: any) => e.status !== 'completed')
+    ok('an open event is available', Boolean(open), open?.label)
+
+    // Enable with a minimal patch — must not disturb the saved connection.
+    const enable = await admin.call('PUT', '/api/whatsapp/config', { autoEvents: true })
+    ok('auto-share enabled', enable.status === 200 && enable.data.autoEvents === true, enable.data)
+    ok('minimal patch keeps the connection', enable.data.configured === true && enable.data.baseUrl === MOCK && Boolean(enable.data.groupChatId), enable.data)
+    ok('minimal patch keeps the session', enable.data.session === 'default', enable.data.session)
+
+    // A recorded result → one announcement in the group.
+    const before = readLog().length
+    const record = await admin.call('POST', '/api/results', {
+      eventId: open.id,
+      firstPlaceCenterId: centers[0].id,
+      secondPlaceCenterId: centers[1].id,
+      thirdPlaceCenterId: centers[2].id,
+      notes: 'auto-share probe',
+    })
+    ok('result recorded', record.status === 201, record)
+    let lines = readLog()
+    const arrived = await waitFor(() => {
+      lines = readLog()
+      return lines.length === before + 1
+    })
+    ok('new result auto-shared', arrived, lines.length - before)
+    const autoText = lines[lines.length - 1]?.text ?? ''
+    ok(
+      'auto message is the branded event podium',
+      autoText.includes('Event result') && autoText.includes('🥇') && autoText.includes('pts') && autoText.includes('via Tourny Lite'),
+      autoText
+    )
+
+    // A correction → a clearly labeled follow-up.
+    const before2 = readLog().length
+    const corrected = await admin.call('POST', '/api/results', {
+      eventId: open.id,
+      firstPlaceCenterId: centers[1].id,
+      secondPlaceCenterId: centers[0].id,
+      thirdPlaceCenterId: centers[2].id,
+      reason: 'Auto-share probe correction',
+    })
+    ok('correction accepted', corrected.status === 200 && corrected.data.isCorrection === true, corrected)
+    const arrived2 = await waitFor(() => {
+      lines = readLog()
+      return lines.length === before2 + 1
+    })
+    ok('correction auto-shared', arrived2, lines.length - before2)
+    ok(
+      'correction clearly labeled',
+      (lines[lines.length - 1]?.text ?? '').includes('Corrected result'),
+      lines[lines.length - 1]?.text
+    )
+
+    // Disabled → recording stays silent.
+    const disable = await admin.call('PUT', '/api/whatsapp/config', { autoEvents: false })
+    ok('auto-share disabled', disable.data.autoEvents === false, disable.data)
+    const detail2 = await admin.call('GET', `/api/tournaments/${seeded.id}`)
+    const open2 = detail2.data.events?.find((e: any) => e.status !== 'completed')
+    const before3 = readLog().length
+    const silent = await admin.call('POST', '/api/results', {
+      eventId: open2.id,
+      firstPlaceCenterId: centers[0].id,
+      secondPlaceCenterId: centers[1].id,
+      thirdPlaceCenterId: centers[2].id,
+    })
+    ok('result recorded with auto-share off', silent.status === 201, silent)
+    await new Promise((r) => setTimeout(r, 1500))
+    ok('no message sent while disabled', readLog().length === before3, readLog().length - before3)
   }
 
   console.log('\n════════════════════════════════════════════════════════════')

@@ -83,15 +83,27 @@ Share results to a WhatsApp group through a self-hosted
    browser; a *Send test message* probe confirms the wiring end to end.
 3. Share from anywhere: *Share* on the Overview sends the overall
    standings; *Share* inside any recorded event sends that podium
-   (medals, centers and points). Both land in the group as formatted
-   WhatsApp text.
+   (medals, centers and points).
+
+Messages are formatted as clean broadcasts — a bold title, a rule, the
+podium or standings in bold with medal ranks, a compact top-of-the-table
+line on event announcements, and a progress + timestamp footer — so the
+group feed reads like a professional results service.
+
+**Auto-share:** once the connection is saved, *Auto-share new results*
+(Settings) sends the event announcement automatically the moment a
+result is recorded — and a clearly labeled *Corrected result* follow-up
+whenever one is corrected. Sharing happens after the save, so a slow
+WhatsApp server never delays the scorekeeper, and a failed share never
+disturbs result recording (it is logged server-side instead).
 
 The connected WhatsApp account must be a member of the destination
 group. Both WAHA engine families work — the JS cores and the Go core
 (`gows`, e.g. the `devlikeapro/waha:gows-arm` image), whose group
 lists use Go-style field names. Headless deployments can
 pre-configure the connection with `WAHA_BASE_URL`, `WAHA_API_KEY`,
-`WAHA_SESSION` and `WAHA_GROUP_CHAT_ID` instead of the Settings UI.
+`WAHA_SESSION`, `WAHA_GROUP_CHAT_ID` and `WAHA_AUTO_EVENTS` instead of
+the Settings UI.
 
 ## Technology
 
@@ -117,7 +129,7 @@ the template tournament from the home screen.
 With the dev server running:
 
 ```bash
-bun run scripts/battle-test.ts          # core suite — 132 assertions
+bun run scripts/battle-test.ts          # core suite (a few assertions are state-dependent)
 bun run scripts/waha-mock.ts 3001 &     # mock WAHA server
 BASE_URL=http://localhost:3000 bun run scripts/whatsapp-test.ts
 ```
@@ -131,9 +143,11 @@ account management.
 
 The WhatsApp suite covers access control on every endpoint, config
 save/masking, session + group discovery, all three message kinds
-(delivered payloads are inspected), and error mapping for wrong keys,
-unreachable servers and unrecorded events — against the bundled WAHA
-mock, so no real group is messaged while testing.
+(delivered payloads are inspected), error mapping for wrong keys,
+unreachable servers and unrecorded events, and the auto-share flow —
+enable via minimal patch, record → announce, correct → labeled
+follow-up, disable → silence — against the bundled WAHA mock, so no
+real group is messaged while testing.
 
 ## Deployment
 

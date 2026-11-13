@@ -118,7 +118,7 @@ export async function submitResult(payload: ResultSubmitPayload) {
   })
 
   emitTournamentChanged(event.tournamentId)
-  return { resultId, isCorrection }
+  return { resultId, isCorrection, tournamentId: event.tournamentId, eventId: event.id }
 }
 
 async function centerCodeOf(centerId: string | null | undefined): Promise<string | null> {

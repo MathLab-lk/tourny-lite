@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { getTournamentDetail } from '@/lib/tournament-service'
 import type { EventDTO, TournamentDetailDTO } from '@/lib/types'
 
 // ─────────────────────────────────────────────────────────────
@@ -25,6 +26,8 @@ export interface WhatsAppConfig {
   session: string
   groupChatId: string
   groupName: string
+  /** Auto-send a message whenever a result is recorded (or corrected). */
+  autoEvents: boolean
 }
 
 export interface WhatsAppPublicConfig {
@@ -33,6 +36,7 @@ export interface WhatsAppPublicConfig {
   session: string
   groupChatId: string
   groupName: string
+  autoEvents: boolean
   apiKeySet: boolean
   apiKeyHint: string
 }
@@ -58,6 +62,7 @@ function configFromEnv(): Partial<WhatsAppConfig> {
     apiKey: process.env.WAHA_API_KEY?.trim() ?? '',
     session: process.env.WAHA_SESSION?.trim() ?? 'default',
     groupChatId: process.env.WAHA_GROUP_CHAT_ID?.trim() ?? '',
+    autoEvents: process.env.WAHA_AUTO_EVENTS === 'true',
   }
 }
 
@@ -79,6 +84,7 @@ export async function getWhatsAppConfig(): Promise<WhatsAppConfig | null> {
         session: stored.session?.trim() || 'default',
         groupChatId: stored.groupChatId?.trim() ?? '',
         groupName: stored.groupName ?? '',
+        autoEvents: stored.autoEvents === true,
       }
     } catch {
       // corrupted row — fall through to the env fallback
@@ -90,6 +96,7 @@ export async function getWhatsAppConfig(): Promise<WhatsAppConfig | null> {
     session: env.session?.trim() || 'default',
     groupChatId: env.groupChatId ?? '',
     groupName: '',
+    autoEvents: env.autoEvents === true,
   }
   if (!merged.baseUrl || !merged.groupChatId) return null
   return merged
@@ -105,13 +112,19 @@ export async function saveWhatsAppConfig(
     session: 'default',
     groupChatId: '',
     groupName: '',
+    autoEvents: false,
   }
   const next: WhatsAppConfig = {
     baseUrl: patch.baseUrl !== undefined ? normalizeBaseUrl(patch.baseUrl) : current.baseUrl,
     apiKey: patch.apiKey?.trim() ? patch.apiKey.trim() : current.apiKey,
-    session: patch.session?.trim() || 'default',
+    // A partial patch (e.g. only the auto-share toggle) must not
+    // reset the session to 'default' — only an explicit value does.
+    session:
+      patch.session !== undefined ? patch.session.trim() || 'default' : current.session,
     groupChatId: patch.groupChatId !== undefined ? patch.groupChatId.trim() : current.groupChatId,
     groupName: patch.groupName !== undefined ? patch.groupName : current.groupName,
+    autoEvents:
+      typeof patch.autoEvents === 'boolean' ? patch.autoEvents : current.autoEvents,
   }
   await db.appSetting.upsert({
     where: { key: SETTING_KEY },
@@ -130,6 +143,7 @@ export function toPublicConfig(cfg: WhatsAppConfig | null): WhatsAppPublicConfig
     session: cfg?.session ?? 'default',
     groupChatId: cfg?.groupChatId ?? '',
     groupName: cfg?.groupName ?? '',
+    autoEvents: cfg?.autoEvents === true,
     apiKeySet: Boolean(cfg?.apiKey),
     apiKeyHint: cfg?.apiKey ? `${cfg.apiKey.slice(0, 3)}…${cfg.apiKey.slice(-2)}` : '',
   }
@@ -243,10 +257,13 @@ export async function sendWhatsAppText(cfg: WhatsAppConfig, text: string): Promi
 }
 
 // ── message builders ──────────────────────────────────────────
-// WhatsApp renders *bold* / _italic_; emoji medals keep the
-// message readable on every phone without images.
+// WhatsApp text formatting: *bold*, _italic_; a repeated ━ renders
+// as a continuous rule. Messages share one layout so the group feed
+// reads like a branded broadcast: title block, rule, body, rule,
+// progress line and an italic stamp footer.
 
 const MEDALS = ['🥇', '🥈', '🥉'] as const
+const RULE = '━━━━━━━━━━━━━━━'
 
 function shareStamp(): string {
   return new Date().toLocaleString('en-GB', {
@@ -262,31 +279,55 @@ function centerLabel(row: { centerCode: string; centerName: string }): string {
   return row.centerName ? `${row.centerName} (${row.centerCode})` : row.centerCode
 }
 
+function footer(detail: TournamentDetailDTO): string[] {
+  const { progress } = detail
+  return [
+    RULE,
+    `✅ ${progress.completed} of ${progress.total} events completed`,
+    `_${shareStamp()} · via Tourny Lite_`,
+  ]
+}
+
+/** Joins non-null lines — intentional blank lines survive. */
+function render(lines: (string | null)[]): string {
+  return lines.filter((l): l is string => l !== null).join('\n')
+}
+
 /** Overall standings — one line per center that has scored. */
 export function buildStandingsMessage(detail: TournamentDetailDTO): string {
-  const { tournament, standings, progress } = detail
+  const { tournament, standings } = detail
   const scored = standings.filter((r) => r.total > 0)
   if (scored.length === 0) {
     throw new WahaError('No results have been recorded yet — nothing to share.', 400)
   }
   const lines = scored.map((row, i) => {
     const prefix = i < 3 ? MEDALS[i] : `${i + 1}.`
-    return `${prefix} ${centerLabel(row)} — ${row.total} pts`
+    return `${prefix} *${centerLabel(row)}* — ${row.total} pts`
   })
-  return [
+  return render([
     `🏆 *${tournament.name}* — Standings`,
-    tournament.organizer ? tournament.organizer : '',
+    tournament.organizer ? `_by ${tournament.organizer}_` : null,
+    RULE,
     '',
     ...lines,
     '',
-    `_${progress.completed} of ${progress.total} events completed · ${shareStamp()}_`,
-  ]
-    .filter((line) => line !== '')
-    .join('\n')
+    ...footer(detail),
+  ])
+}
+
+/** Compact top-of-the-table line for event messages: codes only. */
+function tableLine(detail: TournamentDetailDTO): string | null {
+  const top = detail.standings.filter((r) => r.total > 0).slice(0, 3)
+  if (top.length === 0) return null
+  return `📊 Table: ${top.map((r, i) => `${i + 1}. ${r.centerCode} (${r.total})`).join(' · ')}`
 }
 
 /** Single event podium — the "event result" announcement. */
-export function buildEventMessage(detail: TournamentDetailDTO, eventId: string): string {
+export function buildEventMessage(
+  detail: TournamentDetailDTO,
+  eventId: string,
+  opts?: { isCorrection?: boolean }
+): string {
   const { tournament, divisions, centers } = detail
   const event = detail.events.find((e) => e.id === eventId) as EventDTO | undefined
   if (!event) throw new WahaError('Event not found.', 404)
@@ -315,26 +356,57 @@ export function buildEventMessage(detail: TournamentDetailDTO, eventId: string):
   const lines = places.map((p) => {
     const center = nameByCode.get(p.code)
     const label = center ? centerLabel(center) : p.code
-    return `${p.medal} ${label} — ${p.pts} pts`
+    return `${p.medal} *${label}* — ${p.pts} pts`
   })
 
-  return [
-    `🏁 *${tournament.name}*`,
-    `*${event.gameName}*${event.gameSinhalaName ? ` — ${event.gameSinhalaName}` : ''}`,
+  return render([
+    `${opts?.isCorrection ? '🔁' : '🏁'} *${tournament.name}* — ${
+      opts?.isCorrection ? 'Corrected result' : 'Event result'
+    }`,
+    RULE,
+    `*${event.gameName}*${event.gameSinhalaName ? ` — _${event.gameSinhalaName}_` : ''}`,
     `${divisionLine}${event.subEventIndex > 1 ? ` · Slot ${event.subEventIndex}` : ''}`,
     '',
     ...lines,
     '',
-    `_${shareStamp()}_`,
-  ]
-    .filter((line) => line !== '')
-    .join('\n')
+    tableLine(detail),
+    ...footer(detail),
+  ])
 }
 
 /** Short connectivity probe used by the "Send test message" button. */
 export function buildTestMessage(): string {
-  return [
-    '✅ *Tourny Lite* — WhatsApp connection test',
-    'Results from your tournaments will be shared in this group.',
-  ].join('\n')
+  return render([
+    '✅ *Tourny Lite* — connection test',
+    RULE,
+    'Your WhatsApp connection is working.',
+    'Event results and standings will be shared in this group.',
+    '',
+    `_${shareStamp()} · via Tourny Lite_`,
+  ])
+}
+
+// ── auto-share on recorded results ───────────────────────────
+
+/** Sends the event message automatically after a result is recorded
+ *  (or corrected). Runs after the HTTP response, never blocks the
+ *  scorekeeper, and swallows its own errors — a failed share must
+ *  never disturb result recording. */
+export async function autoShareEventResult(
+  tournamentId: string,
+  eventId: string,
+  opts: { isCorrection: boolean }
+): Promise<void> {
+  try {
+    const cfg = await getWhatsAppConfig()
+    if (!cfg?.autoEvents) return
+    const detail = await getTournamentDetail(tournamentId)
+    if (!detail) return
+    await sendWhatsAppText(cfg, buildEventMessage(detail, eventId, opts))
+  } catch (err) {
+    console.error(
+      '[whatsapp] auto-share failed:',
+      err instanceof Error ? err.message : err
+    )
+  }
 }

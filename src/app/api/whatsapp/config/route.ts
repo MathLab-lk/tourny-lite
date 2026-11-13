@@ -18,7 +18,9 @@ export async function GET() {
 const GROUP_SUFFIX = '@g.us'
 
 /** Administrator only: saves the WhatsApp connection.
- *  An empty `apiKey` keeps the previously stored key. */
+ *  An empty `apiKey` keeps the previously stored key; fields left
+ *  out of the body keep their stored values, so a partial update
+ *  (e.g. only `autoEvents`) touches nothing else. */
 export async function PUT(req: NextRequest) {
   const guard = await requireRole('admin')
   if (guard.response) return guard.response
@@ -38,13 +40,18 @@ export async function PUT(req: NextRequest) {
         { status: 400 }
       )
     }
-    const saved = await saveWhatsAppConfig({
-      baseUrl,
-      apiKey: typeof body.apiKey === 'string' ? body.apiKey : undefined,
-      session: typeof body.session === 'string' ? body.session : undefined,
-      groupChatId: typeof body.groupChatId === 'string' ? body.groupChatId : undefined,
-      groupName: typeof body.groupName === 'string' ? body.groupName : undefined,
-    })
+    // Only fields present in the body are patched — absent fields
+    // keep their stored values (the auto-share toggle sends just
+    // { autoEvents } and must not wipe the connection).
+    const patch: Parameters<typeof saveWhatsAppConfig>[0] = {}
+    if (typeof body.baseUrl === 'string') patch.baseUrl = body.baseUrl
+    if (typeof body.apiKey === 'string') patch.apiKey = body.apiKey
+    if (typeof body.session === 'string') patch.session = body.session
+    if (typeof body.groupChatId === 'string') patch.groupChatId = body.groupChatId
+    if (typeof body.groupName === 'string') patch.groupName = body.groupName
+    if (typeof body.autoEvents === 'boolean') patch.autoEvents = body.autoEvents
+
+    const saved = await saveWhatsAppConfig(patch)
     return NextResponse.json(toPublicConfig(saved))
   } catch (err) {
     const { message, status } =
