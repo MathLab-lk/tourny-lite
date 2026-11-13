@@ -34,6 +34,13 @@ export async function PUT(req: NextRequest) {
         { status: 400 }
       )
     }
+    const publicBaseUrl = typeof body.publicBaseUrl === 'string' ? body.publicBaseUrl.trim() : ''
+    if (publicBaseUrl && !/^https?:\/\//i.test(publicBaseUrl)) {
+      return NextResponse.json(
+        { error: 'The public address must start with http:// or https://' },
+        { status: 400 }
+      )
+    }
     if (body.groupChatId && !String(body.groupChatId).endsWith(GROUP_SUFFIX)) {
       return NextResponse.json(
         { error: 'A group chat id must end with @g.us — pick the group from the list.' },
@@ -45,6 +52,7 @@ export async function PUT(req: NextRequest) {
     // { autoEvents } and must not wipe the connection).
     const patch: Parameters<typeof saveWhatsAppConfig>[0] = {}
     if (typeof body.baseUrl === 'string') patch.baseUrl = body.baseUrl
+    if (typeof body.publicBaseUrl === 'string') patch.publicBaseUrl = body.publicBaseUrl
     if (typeof body.apiKey === 'string') patch.apiKey = body.apiKey
     if (typeof body.session === 'string') patch.session = body.session
     if (typeof body.groupChatId === 'string') patch.groupChatId = body.groupChatId

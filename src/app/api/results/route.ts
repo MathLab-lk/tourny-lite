@@ -1,6 +1,6 @@
 import { after, NextRequest, NextResponse } from 'next/server'
 import { submitResult } from '@/lib/result-service'
-import { autoShareEventResult } from '@/lib/whatsapp'
+import { autoShareEventResult, originFromRequest } from '@/lib/whatsapp'
 import { friendlyError, requireRole } from '@/lib/auth'
 import type { ResultSubmitPayload } from '@/lib/types'
 
@@ -22,7 +22,15 @@ export async function POST(req: NextRequest) {
   try {
     const payload = (await req.json()) as ResultSubmitPayload
     const out = await submitResult({ ...payload, recordedBy: guard.session.name })
-    after(() => void autoShareEventResult(out.tournamentId, out.eventId, { isCorrection: out.isCorrection }))
+    // Capture the origin while the request is alive — the share
+    // runs after the response, when req may already be gone.
+    const origin = originFromRequest(req)
+    after(() =>
+      void autoShareEventResult(out.tournamentId, out.eventId, {
+        isCorrection: out.isCorrection,
+        origin,
+      })
+    )
     return NextResponse.json(out, { status: out.isCorrection ? 200 : 201 })
   } catch (err) {
     const { message, status } = friendlyError(err, 'Failed to submit result')

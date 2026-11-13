@@ -40,7 +40,16 @@ own credentials.
 
 ## Navigation model
 
-iOS-inspired and consistent across devices:
+iOS-inspired, consistent across devices, and **URL-addressable** —
+every view has a path, so any screen can be linked, bookmarked and
+restored with the browser's back button:
+
+| Path | View |
+| --- | --- |
+| `/` | Tournaments (home) |
+| `/t/{id}` | A tournament's Overview |
+| `/t/{id}/scoring` · `/t/{id}/centers` · `/t/{id}/history` · `/t/{id}/settings` | The other views |
+| `/present/{id}` | The public guest scoreboard (no sign-in) |
 
 - **Home** — the tournament list; every tournament opens on its Overview.
 - **Overview · Scoring · History** — the primary destinations (a glass
@@ -51,6 +60,24 @@ iOS-inspired and consistent across devices:
 - **The scoreboard is a presentation, not a place** — it never occupies a
   tab; *Present* on the Overview throws it on the projector, and closing
   it returns to your context.
+
+### Guest scoreboard (`/present/{id}`)
+
+A standalone, public live scoreboard for the people watching from the
+outside: no sign-in, no app chrome — open the link and watch. Standings
+arrive over the same Server-Sent Events stream the staff app uses and
+reorder live; on phones the leaderboard becomes stacked result cards,
+and the latest recorded podium shows as a *Latest result* strip. Grab the
+link with **Guest link** on the Overview (or from *Settings → WhatsApp
+sharing*).
+
+### Centers
+
+The roster is fully editable: add centers in bulk (code + optional name),
+**edit any center's code, name and location** inline from the table, and
+remove centers (with a confirmation that spells out what the standings
+lose). Edits flow everywhere immediately — standings, podium pickers and
+shared cards.
 
 ### Invitation codes
 
@@ -92,6 +119,15 @@ correctly, sent as JPEG with a short caption via WAHA's `sendImage`.
 If a card cannot be rendered or delivered (missing fonts, an engine
 without `sendImage`, a flaky server), the equivalent plain-text
 announcement is sent instead, so the group always hears the result.
+
+**Every broadcast carries the guest link:** the cards draw a
+*Watch live* bar and the image caption (and the text fallback) carries
+the full `/present/{id}` URL, which WhatsApp makes tappable — the
+group can follow the tournament live from the chat. The link's base
+address is taken from the request that triggers the share; if guests
+reach the app through a different address (a domain or a tunnel), set
+it once in *Public address for guest links* in the settings (or the
+`PUBLIC_BASE_URL` environment variable).
 
 **Auto-share:** once the connection is saved, *Auto-share new results*
 (Settings) sends the event card automatically the moment a result is
@@ -147,23 +183,26 @@ bun run scripts/waha-mock.ts 3001 &     # mock WAHA server
 BASE_URL=http://localhost:3000 bun run scripts/whatsapp-test.ts
 ```
 
-The battle suite exercises authentication, role enforcement (guest /
-scorekeeper / administrator), invitation codes (generation, expiry,
-single-use redemption, role grants), tournament lifecycle, result
-guardrails and standings mathematics, corrections and the audit trail,
-center management, the live event stream, concurrent submissions and
-account management.
+The battle suite (149 assertions) exercises authentication, role
+enforcement (guest / scorekeeper / administrator), invitation codes
+(generation, expiry, single-use redemption, role grants), tournament
+lifecycle, result guardrails and standings mathematics, corrections and
+the audit trail, center management — bulk add, **editing (code, name,
+location, duplicate-code conflicts)** and removal — the URL routes
+(including the public present page and 404 fall-through), the live
+event stream, concurrent submissions and account management.
 
-The WhatsApp suite covers access control on every endpoint, config
-save/masking, session + group discovery, all three message kinds
-(delivered payloads are inspected — image cards for standings and
-events, text for the probe, the plain-text fallback when `sendImage`
-fails), error mapping for wrong keys, unreachable servers and
-unrecorded events, auto-share — enable via minimal patch, record →
-announce, correct → labeled follow-up, disable → silence — and the
-share-card builders themselves (escaping, partial podiums, name
-fitting), against the bundled WAHA mock, so no real group is messaged
-while testing.
+The WhatsApp suite (100 assertions) covers access control on every
+endpoint, config save/masking, session + group discovery, all three
+message kinds (delivered payloads are inspected — image cards for
+standings and events, text for the probe, the plain-text fallback when
+`sendImage` fails), error mapping for wrong keys, unreachable servers
+and unrecorded events, the guest link in every caption (configured
+public address, request-origin fallback and on auto-shares), auto-share
+— enable via minimal patch, record → announce, correct → labeled
+follow-up, disable → silence — and the share-card builders themselves
+(escaping, partial podiums, name fitting, the watch-live bar), against
+the bundled WAHA mock, so no real group is messaged while testing.
 
 ## Deployment
 
@@ -195,3 +234,4 @@ scripts/                 Battle test suite + demo seeder
 | --- | --- |
 | `DATABASE_URL` | SQLite file path, e.g. `file:./db/custom.db` |
 | `AUTH_SECRET` | Secret used to sign session cookies — use a long random value in production |
+| `PUBLIC_BASE_URL` | Optional: public address used for guest links in shared messages (defaults to the request's host) |

@@ -4,6 +4,8 @@ import { getTournamentDetail } from '@/lib/tournament-service'
 import {
   buildTestMessage,
   getWhatsAppConfig,
+  guestLink,
+  originFromRequest,
   sendWhatsAppText,
   shareEventResult,
   shareStandings,
@@ -41,17 +43,22 @@ export async function POST(req: NextRequest) {
     }
 
     let via: 'image' | 'text'
+    const origin = originFromRequest(req)
     if (kind === 'test') {
       await sendWhatsAppText(cfg, buildTestMessage())
       via = 'text'
     } else if (kind === 'standings') {
       const detail = await getTournamentDetail(String(body.tournamentId ?? ''))
       if (!detail) return NextResponse.json({ error: 'Tournament not found.' }, { status: 404 })
-      via = await shareStandings(cfg, detail)
+      via = await shareStandings(cfg, detail, {
+        presentUrl: guestLink(cfg, origin, detail.tournament.id),
+      })
     } else {
       const detail = await getTournamentDetail(String(body.tournamentId ?? ''))
       if (!detail) return NextResponse.json({ error: 'Tournament not found.' }, { status: 404 })
-      via = await shareEventResult(cfg, detail, String(body.eventId ?? ''))
+      via = await shareEventResult(cfg, detail, String(body.eventId ?? ''), {
+        presentUrl: guestLink(cfg, origin, detail.tournament.id),
+      })
     }
 
     return NextResponse.json({ ok: true, via, groupName: cfg.groupName || cfg.groupChatId })

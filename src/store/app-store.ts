@@ -1,6 +1,8 @@
 'use client'
 
 import { create } from 'zustand'
+import { navPush, navReplace } from '@/lib/nav'
+import { viewPath, type AppRoute } from '@/lib/app-route'
 import type {
   AdminUserDTO,
   AuditEntryDTO,
@@ -21,7 +23,6 @@ export type View =
   | 'settings'
 export type PrintMode = 'progress' | null
 
-const ACTIVE_KEY = 'tourny_lite_active'
 const queueKey = (tid: string) => `tourny_lite_queue_${tid}`
 
 /** Error carrying the HTTP status so callers can branch on 401/403/404. */
@@ -75,6 +76,9 @@ interface AppState {
   // projector), not a destination — so it lives outside the view
   // model and never disturbs the underlying navigation state.
   scoreboardOpen: boolean
+  // Set when the URL points at a tournament that does not exist;
+  // the app root toasts and lands on the tournament list.
+  missingTournament: boolean
 
   // Session (public read / authenticated write)
   session: SessionUserDTO | null
@@ -90,6 +94,10 @@ interface AppState {
   openScoreboard: () => void
   closeScoreboard: () => void
   hydrate: () => void
+  /** URL → store: the only writer of view / activeTournamentId. */
+  applyRoute: (route: AppRoute) => Promise<void>
+  /** Clears the active tournament without touching the address bar. */
+  applyHome: () => void
   setAuthDialogOpen: (open: boolean) => void
   setTeamDialogOpen: (open: boolean) => void
   loadSession: () => Promise<void>
@@ -130,6 +138,10 @@ interface AppState {
     opts?: { tournamentId?: string; eventId?: string }
   ) => Promise<{ ok: boolean; via?: 'image' | 'text'; groupName?: string; error?: string }>
   addCenters: (centersText: string) => Promise<boolean>
+  updateCenter: (
+    centerId: string,
+    patch: { code?: string; name?: string; location?: string }
+  ) => Promise<{ ok: boolean; error?: string }>
   removeCenter: (centerId: string) => Promise<boolean>
   loadAudit: (tournamentId: string) => Promise<void>
   flushQueue: (tid?: string) => Promise<void>
@@ -155,6 +167,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   printMode: null,
   hydrated: false,
   scoreboardOpen: false,
+  missingTournament: false,
 
   session: null,
   setupRequired: false,
@@ -165,22 +178,26 @@ export const useAppStore = create<AppState>((set, get) => ({
   invites: [],
   loadingInvites: false,
 
-  setView: (view) => set({ view }),
+  // ── Navigation ──────────────────────────────────────────
+  // These actions push URLs; the app root applies whatever the
+  // URL then says (applyRoute). The address bar is the source of
+  // truth, so the store and the URL can never drift apart.
+
+  setView: (view) => {
+    navPush(viewPath(view, get().activeTournamentId))
+  },
 
   openScoreboard: () => set({ scoreboardOpen: true }),
+
   closeScoreboard: () => set({ scoreboardOpen: false }),
 
   hydrate: () => {
     if (get().hydrated) return
-    const active =
-      typeof window !== 'undefined' ? window.localStorage.getItem(ACTIVE_KEY) : null
     set({ hydrated: true, online: typeof navigator !== 'undefined' ? navigator.onLine : true })
     void get().loadSession()
-    get().loadTournaments().then(() => {
-      if (active && get().tournaments.some((t) => t.id === active)) {
-        get().openTournament(active)
-      }
-    })
+    void get().loadTournaments()
+    // Which tournament is open is owned by the URL now (see
+    // applyRoute) — no stored "last tournament" to restore.
   },
 
   // ── Session ──────────────────────────────────────────────
@@ -337,28 +354,79 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  // Opening a tournament is a navigation — push the URL; the app
+  // root applies it (fetching the detail and wiring the stream).
   openTournament: async (id, view) => {
-    if (typeof window !== 'undefined') window.localStorage.setItem(ACTIVE_KEY, id)
-    // Everyone lands on the Overview — the tournament's home screen.
-    // From there the tabs lead naturally to Scoring or the projector.
-    set({ activeTournamentId: id, view: view ?? 'overview', loadingDetail: true })
+    navPush(viewPath(view ?? 'overview', id))
+  },
+
+  // ── URL → store ─────────────────────────────────────────
+  // The app root calls this whenever the route changes (mount,
+  // navigation, browser back/forward). It is the only writer of
+  // `view` and `activeTournamentId` — navigation actions above
+  // only push URLs, so there is exactly one direction of truth.
+
+  applyRoute: async (route) => {
+    const s = get()
+    if (route.view === 'home') {
+      if (s.activeTournamentId !== null) get().applyHome()
+      return
+    }
+    if (route.tid !== s.activeTournamentId) {
+      // A different tournament — open it silently (the URL already
+      // points here, nothing to push).
+      if (eventSource) {
+        eventSource.close()
+        eventSource = null
+      }
+      set({
+        activeTournamentId: route.tid,
+        view: route.view,
+        loadingDetail: true,
+        sseConnected: false,
+      })
+      const es = new EventSource(`/api/stream?tournamentId=${encodeURIComponent(route.tid)}`)
+      es.addEventListener('ready', () => set({ sseConnected: true }))
+      es.addEventListener('change', () => {
+        void get().refreshActive()
+        void get().loadTournaments()
+      })
+      es.onerror = () => {
+        set({ sseConnected: false })
+        // EventSource auto-reconnects; refresh data as a safety net
+        void get().refreshActive()
+      }
+      eventSource = es
+      await get().refreshActive()
+      if (get().detail === null && get().activeTournamentId === route.tid) {
+        // Nothing came back — either a bad link, or the tournament
+        // list is still loading and we cannot tell yet.
+        if (get().loadingTournaments) await get().loadTournaments()
+        if (!get().tournaments.some((t) => t.id === route.tid)) {
+          set({ missingTournament: true })
+          get().applyHome()
+          return
+        }
+        await get().refreshActive()
+      }
+      return
+    }
+    if (route.view !== s.view) set({ view: route.view })
+  },
+
+  applyHome: () => {
     if (eventSource) {
       eventSource.close()
       eventSource = null
     }
-    const es = new EventSource(`/api/stream?tournamentId=${encodeURIComponent(id)}`)
-    es.addEventListener('ready', () => set({ sseConnected: true }))
-    es.addEventListener('change', () => {
-      void get().refreshActive()
-      void get().loadTournaments()
+    set({
+      activeTournamentId: null,
+      detail: null,
+      audit: [],
+      view: 'home',
+      sseConnected: false,
+      scoreboardOpen: false,
     })
-    es.onerror = () => {
-      set({ sseConnected: false })
-      // EventSource auto-reconnects; refresh data as a safety net
-      void get().refreshActive()
-    }
-    eventSource = es
-    await get().refreshActive()
   },
 
   refreshActive: async () => {
@@ -370,25 +438,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch {
       // Tournament may have been deleted
       if (get().detail === null) set({ loadingDetail: false })
-      const stillExists = get().tournaments.some((t) => t.id === id)
-      if (!stillExists) get().closeTournament()
+      const stillExists =
+        get().loadingTournaments || get().tournaments.some((t) => t.id === id)
+      if (!stillExists) {
+        // Deleted while we were watching it — leave the URL alone
+        // and flag it; the app root lands on the list.
+        set({ missingTournament: true })
+        get().applyHome()
+      }
     }
   },
 
+  // Leaving a tournament is a navigation too — back to the list.
   closeTournament: () => {
-    if (eventSource) {
-      eventSource.close()
-      eventSource = null
-    }
-    if (typeof window !== 'undefined') window.localStorage.removeItem(ACTIVE_KEY)
-    set({
-      activeTournamentId: null,
-      detail: null,
-      audit: [],
-      view: 'home',
-      sseConnected: false,
-      scoreboardOpen: false,
-    })
+    navPush('/')
   },
 
   createFromPreset: async (presetId, nameOverride) => {
@@ -433,7 +496,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteTournament: async (id) => {
     try {
       await api(`/api/tournaments/${id}`, { method: 'DELETE' })
-      if (get().activeTournamentId === id) get().closeTournament()
+      if (get().activeTournamentId === id) {
+        // The URL points at a tournament that no longer exists —
+        // clear the state and replace the dead address.
+        get().applyHome()
+        navReplace('/')
+      }
       await get().loadTournaments()
       return true
     } catch {
@@ -525,6 +593,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       return true
     } catch {
       return false
+    }
+  },
+
+  updateCenter: async (centerId, patch) => {
+    const tid = get().activeTournamentId
+    if (!tid) return { ok: false, error: 'No tournament selected' }
+    try {
+      await api(`/api/tournaments/${tid}/centers`, {
+        method: 'PATCH',
+        body: JSON.stringify({ centerId, ...patch }),
+      })
+      await Promise.all([get().refreshActive(), get().loadTournaments()])
+      return { ok: true }
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Could not update the center',
+      }
     }
   },
 

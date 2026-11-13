@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, MessageCircle, PlugZap, Save, Zap } from 'lucide-react'
+import { Check, Copy, Loader2, MessageCircle, PlugZap, Save, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/store/app-store'
-import { cn } from '@/lib/utils'
+import { copyText, cn } from '@/lib/utils'
 
 /*
  * WhatsApp sharing — the admin side of the WAHA integration.
@@ -36,6 +36,7 @@ interface PublicConfig {
   autoEvents: boolean
   apiKeySet: boolean
   apiKeyHint: string
+  publicBaseUrl: string
 }
 
 interface SessionOption {
@@ -73,12 +74,15 @@ async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
 export function WhatsAppCard() {
   const { toast } = useToast()
   const sendWhatsApp = useAppStore((s) => s.sendWhatsApp)
+  const activeTournamentId = useAppStore((s) => s.activeTournamentId)
 
   const [saved, setSaved] = useState<PublicConfig | null>(null)
   const [baseUrl, setBaseUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [session, setSession] = useState('')
   const [groupChatId, setGroupChatId] = useState('')
+  const [publicBaseUrl, setPublicBaseUrl] = useState('')
+  const [copiedLink, setCopiedLink] = useState(false)
 
   const [sessions, setSessions] = useState<SessionOption[]>([])
   const [groups, setGroups] = useState<GroupOption[]>([])
@@ -126,6 +130,7 @@ export function WhatsAppCard() {
         setBaseUrl(cfg.baseUrl)
         setSession(cfg.session)
         setGroupChatId(cfg.groupChatId)
+        setPublicBaseUrl(cfg.publicBaseUrl)
         setLoaded(true)
         if (cfg.configured && cfg.baseUrl) {
           setBusy('connect')
@@ -209,6 +214,7 @@ export function WhatsAppCard() {
           session,
           groupChatId,
           groupName: groupNameOf(groupChatId),
+          publicBaseUrl,
         }),
       })
       setSaved(cfg)
@@ -258,6 +264,23 @@ export function WhatsAppCard() {
 
   const meta = sessionStatus ? sessionMeta(sessionStatus) : null
 
+  // The guest link for the open tournament — the address shared in
+  // every WhatsApp message. Falls back to this browser's address.
+  const guestUrl = activeTournamentId
+    ? `${(publicBaseUrl || saved?.publicBaseUrl || '').trim() || window.location.origin}/present/${activeTournamentId}`
+    : null
+
+  const copyGuestLink = async () => {
+    if (!guestUrl) return
+    const ok = await copyText(guestUrl)
+    if (ok) {
+      setCopiedLink(true)
+      setTimeout(() => setCopiedLink(false), 2000)
+    } else {
+      toast({ title: 'Copy failed', description: 'Select the address and copy it manually.', variant: 'destructive' })
+    }
+  }
+
   // The group picker's state, in words — never claims "Loading"
   // when nothing is in flight (an empty result is not a load).
   const groupPlaceholder =
@@ -306,6 +329,23 @@ export function WhatsAppCard() {
               autoComplete="off"
             />
           </div>
+        </div>
+
+        {/* Guest links — where shared links should lead */}
+        <div className="space-y-1.5">
+          <Label htmlFor="wa-public-url">Public address for guest links</Label>
+          <Input
+            id="wa-public-url"
+            placeholder="https://tourny.example.lk"
+            value={publicBaseUrl}
+            onChange={(e) => setPublicBaseUrl(e.target.value)}
+            autoComplete="url"
+          />
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            Every shared message carries a link to the live guest scoreboard. Leave empty to
+            use the address you are browsing from; set it when guests reach this server
+            through a different address (a domain or a tunnel).
+          </p>
         </div>
 
         {/* Session + group — appear as the connection verifies */}
@@ -399,6 +439,31 @@ export function WhatsAppCard() {
             </Button>
           ) : null}
         </div>
+
+        {/* Guest scoreboard link — the address every share carries */}
+        {saved?.configured && guestUrl ? (
+          <div className="flex items-center gap-2 rounded-lg border p-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">Guest scoreboard</p>
+              <p className="truncate font-mono text-xs text-muted-foreground" title={guestUrl}>
+                {guestUrl}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 shrink-0 gap-1.5"
+              onClick={() => void copyGuestLink()}
+            >
+              {copiedLink ? (
+                <Check className="h-4 w-4 text-emerald-600" aria-hidden />
+              ) : (
+                <Copy className="h-4 w-4" aria-hidden />
+              )}
+              {copiedLink ? 'Copied' : 'Copy'}
+            </Button>
+          </div>
+        ) : null}
 
         {/* Auto-share — once the connection is saved */}
         {saved?.configured ? (

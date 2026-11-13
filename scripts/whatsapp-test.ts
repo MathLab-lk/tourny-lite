@@ -239,20 +239,28 @@ async function main() {
   // ═══ 5. Save the config ═══
   section('5 · Save config')
   {
+    const badPublic = await admin.call('PUT', '/api/whatsapp/config', {
+      publicBaseUrl: 'not-a-url',
+    })
+    ok('malformed public address rejected', badPublic.status === 400, badPublic.status)
+
     const save = await admin.call('PUT', '/api/whatsapp/config', {
       baseUrl: MOCK,
       apiKey: MOCK_KEY,
       session: 'default',
       groupChatId: '1203630abcdef123456789@g.us',
       groupName: 'Math Competition 2026 — Results',
+      publicBaseUrl: 'https://tourny.example.lk',
     })
     ok('saves the connection', save.status === 200 && save.data.configured === true, save)
     ok('auto-share defaults to off', save.data.autoEvents === false, save.data)
+    ok('public address saved', save.data.publicBaseUrl === 'https://tourny.example.lk', save.data)
 
     ok('key masked in response', save.data.apiKeySet === true && /^\S{3}…\S{2}$/.test(save.data.apiKeyHint ?? '') && !save.data.apiKey, save.data)
 
     const read = await admin.call('GET', '/api/whatsapp/config')
     ok('config persists', read.data.configured === true && read.data.baseUrl === MOCK && read.data.groupName === 'Math Competition 2026 — Results', read.data)
+    ok('public address persists', read.data.publicBaseUrl === 'https://tourny.example.lk', read.data)
     ok('full key never returned', !read.data.apiKey && read.data.apiKeyHint === save.data.apiKeyHint, read.data)
   }
 
@@ -366,6 +374,17 @@ async function main() {
       standingsImg?.caption
     )
 
+    // The guest scoreboard link rides along in every caption —
+    // WhatsApp makes caption URLs tappable.
+    const seededTid = (await admin.call('GET', '/api/tournaments')).data?.tournaments?.find(
+      (t: any) => t.templateId || t.name.includes('Math Competition')
+    )?.id
+    ok(
+      'image captions carry the guest scoreboard link (public address)',
+      Boolean(seededTid) && images.every((l) => (l.caption ?? '').includes(`https://tourny.example.lk/present/${seededTid}`)),
+      images.map((l) => l.caption)
+    )
+
     const eventImg = images.find((l) => (l.caption ?? '').includes('Event result'))
     ok(
       'event caption names tournament, game and category',
@@ -420,6 +439,11 @@ async function main() {
       ),
       text.text
     )
+    ok(
+      'fallback text carries the watch-live link',
+      Boolean(text.text?.includes(`🔴 Watch live: https://tourny.example.lk/present/`)),
+      text.text
+    )
 
     // Clean send again — images are back.
     const again = await admin.call('POST', '/api/whatsapp/send', {
@@ -442,9 +466,41 @@ async function main() {
       groupName: 'M&E Coordinators',
     })
     ok('re-save without key keeps the key', saveNoKey.data.configured === true && saveNoKey.data.apiKeySet === true, saveNoKey.data)
+    ok('re-save without the field keeps the public address', saveNoKey.data.publicBaseUrl === 'https://tourny.example.lk', saveNoKey.data.publicBaseUrl)
 
     const verifyOld = await admin.call('POST', '/api/whatsapp/verify', { baseUrl: MOCK, apiKey: 'wrong-again' })
     ok('a freshly typed wrong key still rejected', verifyOld.status === 502, verifyOld)
+  }
+
+  // ═══ 8b. Guest link without a configured public address ═══
+  section('8b · Guest link falls back to the request origin')
+  {
+    const clear = await admin.call('PUT', '/api/whatsapp/config', { publicBaseUrl: '' })
+    ok('public address cleared', clear.status === 200 && clear.data.publicBaseUrl === '', clear.data)
+    ok('connection survives the partial patch', clear.data.configured === true, clear.data)
+
+    const tournaments = await admin.call('GET', '/api/tournaments')
+    const seeded = tournaments.data.tournaments?.find((t: any) => t.templateId || t.name.includes('Math Competition'))
+    const detail = await admin.call('GET', `/api/tournaments/${seeded.id}`)
+    const done = detail.data.events?.find(
+      (e: any) => e.status === 'completed' && e.result?.firstPlaceCenterId && e.result?.secondPlaceCenterId && e.result?.thirdPlaceCenterId
+    )
+
+    const before = readLog().length
+    const sent = await admin.call('POST', '/api/whatsapp/send', {
+      kind: 'event',
+      tournamentId: seeded.id,
+      eventId: done.id,
+    })
+    ok('event still sends as a card', sent.status === 200 && sent.data.via === 'image', sent)
+    const lines = readLog()
+    ok('one message delivered', lines.length === before + 1, lines.length - before)
+    const last = lines[lines.length - 1]
+    ok(
+      'caption carries the origin-derived guest link',
+      Boolean((last.caption ?? '').includes(`${BASE}/present/${seeded.id}`)),
+      last.caption
+    )
   }
 
   // ═══ 9. Auto-share on recorded results ═══
@@ -493,6 +549,11 @@ async function main() {
       'auto-share delivers the styled event card',
       autoMsg.kind === 'image' && (autoMsg.caption ?? '').includes('Event result') && (autoMsg.imageBytes ?? 0) > 10_000,
       autoMsg
+    )
+    ok(
+      'auto-share caption carries the guest link (from the recording request)',
+      Boolean((autoMsg.caption ?? '').includes(`${BASE}/present/${seeded.id}`)),
+      autoMsg.caption
     )
 
     // A correction → a clearly labeled follow-up card.
@@ -655,6 +716,23 @@ async function main() {
       'standings card shows ranks, named and unnamed centers',
       Boolean(standings?.svg.includes('Kaduwela Center') && standings.svg.includes('>105<') && standings.svg.includes('TOURNY LITE')),
       standings?.caption
+    )
+    ok('cards without a link carry no watch-live bar', !standings?.svg.includes('WATCH LIVE') && !standings?.caption.includes('/present/'), standings?.caption)
+
+    const url = 'https://tourny.example.lk/present/t1'
+    const liveEvent = buildEventCard(mkDetail(), 'e1', { presentUrl: url })
+    ok(
+      'event card with a link draws the watch-live bar (protocol stripped for size)',
+      Boolean(liveEvent?.svg.includes('WATCH LIVE') && liveEvent.svg.includes('tourny.example.lk/present/t1') && !liveEvent.svg.includes('https://tourny.example.lk')),
+      liveEvent?.caption
+    )
+    ok('event card caption carries the full link', (liveEvent?.caption ?? '').endsWith(url), liveEvent?.caption)
+
+    const liveStandings = buildStandingsCard(mkDetail(), { presentUrl: url })
+    ok(
+      'standings card with a link draws the watch-live bar and caption',
+      Boolean(liveStandings?.svg.includes('WATCH LIVE') && (liveStandings?.caption ?? '').endsWith(url)),
+      liveStandings?.caption
     )
 
     // 12 scored centers → capped at 10 + "and 2 more centers below"

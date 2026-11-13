@@ -194,6 +194,38 @@ function footer(detail: TournamentDetailDTO, y: number): { svg: string; bottom: 
   return { svg: parts.join('\n'), bottom: y + 200 }
 }
 
+/** The guest link bar — a button-styled pill inviting the group to
+ *  open the live scoreboard. The full URL rides along in the image
+ *  caption (where WhatsApp makes it tappable); the bar shows it
+ *  without the protocol so it stays as large as possible. */
+function watchLiveBar(y: number, url: string): { svg: string; bottom: number } {
+  const H = 92
+  const padX = 26
+  const playR = 15
+  const playCx = M + padX + playR
+  const labelX = playCx + playR + 20
+  const label = 'WATCH LIVE'
+  const labelW = width(label, 'semibold', 26, 3)
+  // A clear gap + a faint divider keeps the label and the address
+  // from running together when the URL is long.
+  const gap = 38
+  const urlX = labelX + labelW + gap
+  const urlMax = W - M - padX - urlX
+  const display = url.replace(/^https?:\/\//, '')
+  const fitted = fit(display, 'medium', 27, urlMax, 20)
+  return {
+    svg: [
+      `<rect x="${M}" y="${y}" width="${CW}" height="${H}" rx="${H / 2}" fill="${EMERALD}"/>`,
+      `<circle cx="${playCx}" cy="${y + H / 2}" r="${playR}" fill="#FFFFFF" opacity="0.24"/>`,
+      `<path d="M ${playCx - 5} ${y + H / 2 - 7} L ${playCx + 8} ${y + H / 2} L ${playCx - 5} ${y + H / 2 + 7} Z" fill="#FFFFFF"/>`,
+      text(label, { x: labelX, y: baseline(y, H, 26), size: 26, weight: 'semibold', fill: '#FFFFFF', letterSpacing: 3 }),
+      `<rect x="${Math.round(labelX + labelW + gap / 2)}" y="${y + H / 2 - 14}" width="2" height="28" rx="1" fill="#FFFFFF" opacity="0.5"/>`,
+      text(fitted.text, { x: urlX, y: baseline(y, H, fitted.size), size: fitted.size, weight: 'medium', fill: '#D9F4E6' }),
+    ].join('\n'),
+    bottom: y + H,
+  }
+}
+
 function svgDocument(height: number, body: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}">\n<rect width="${W}" height="${height}" fill="${PAPER}"/>\n${body}\n</svg>`
 }
@@ -242,7 +274,7 @@ function podiumRow(
 export function buildEventCard(
   detail: TournamentDetailDTO,
   eventId: string,
-  opts?: { isCorrection?: boolean }
+  opts?: { isCorrection?: boolean; presentUrl?: string | null }
 ): ShareCard | null {
   const { tournament, divisions, centers } = detail
   const event = detail.events.find((e) => e.id === eventId) as EventDTO | undefined
@@ -326,13 +358,21 @@ export function buildEventCard(
     y += 110
   }
 
+  if (opts?.presentUrl) {
+    const bar = watchLiveBar(y + 14, opts.presentUrl)
+    parts.push(bar.svg)
+    y = bar.bottom + 12
+  }
+
   const foot = footer(detail, y + 30)
   parts.push(foot.svg)
 
   const category = division ? `Cat ${division.code}` : `Cat ${event.divisionCode}`
   return {
     svg: svgDocument(foot.bottom, parts.join('\n')),
-    caption: `${isCorrection ? '🔁 Corrected result' : '🏁 Event result'} · ${tournament.name} · ${event.gameName} (${category})`,
+    caption:
+      `${isCorrection ? '🔁 Corrected result' : '🏁 Event result'} · ${tournament.name} · ${event.gameName} (${category})` +
+      (opts?.presentUrl ? `\n${opts.presentUrl}` : ''),
   }
 }
 
@@ -340,7 +380,10 @@ export function buildEventCard(
 
 const MAX_STANDINGS_ROWS = 10
 
-export function buildStandingsCard(detail: TournamentDetailDTO): ShareCard | null {
+export function buildStandingsCard(
+  detail: TournamentDetailDTO,
+  opts?: { presentUrl?: string | null }
+): ShareCard | null {
   const { tournament } = detail
   const scored = detail.standings.filter((r) => r.total > 0)
   if (scored.length === 0) return null
@@ -400,13 +443,21 @@ export function buildStandingsCard(detail: TournamentDetailDTO): ShareCard | nul
     y += 66
   }
 
+  if (opts?.presentUrl) {
+    const bar = watchLiveBar(y + 14, opts.presentUrl)
+    parts.push(bar.svg)
+    y = bar.bottom + 12
+  }
+
   const foot = footer(detail, y + 30)
   parts.push(foot.svg)
 
   const { progress } = detail
   return {
     svg: svgDocument(foot.bottom, parts.join('\n')),
-    caption: `🏆 ${tournament.name} — standings after ${progress.completed} of ${progress.total} events`,
+    caption:
+      `🏆 ${tournament.name} — standings after ${progress.completed} of ${progress.total} events` +
+      (opts?.presentUrl ? `\n${opts.presentUrl}` : ''),
   }
 }
 

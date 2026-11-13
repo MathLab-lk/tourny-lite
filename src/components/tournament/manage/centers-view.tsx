@@ -2,9 +2,10 @@
 
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Loader2, Plus, Trash2 } from 'lucide-react'
+import { Check, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
   AlertDialog,
@@ -17,6 +18,14 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Table,
   TableBody,
   TableCell,
@@ -28,7 +37,7 @@ import { useToast } from '@/hooks/use-toast'
 import { AnimatedNumber, EmptyState, PageHeader, easeOutExpo, medalText } from '@/components/tournament/ui-bits'
 import { useAppStore } from '@/store/app-store'
 import { cn } from '@/lib/utils'
-import type { StandingRow } from '@/lib/types'
+import type { CenterDTO, StandingRow } from '@/lib/types'
 
 /**
  * Centers — the roster and its standings, side by side in one table.
@@ -40,12 +49,18 @@ export function CentersView() {
   const session = useAppStore((s) => s.session)
   const isAdmin = session?.role === 'admin'
   const addCenters = useAppStore((s) => s.addCenters)
+  const updateCenter = useAppStore((s) => s.updateCenter)
   const removeCenter = useAppStore((s) => s.removeCenter)
 
   const [centersText, setCentersText] = useState('')
   const [addingCenters, setAddingCenters] = useState(false)
   const [removeTarget, setRemoveTarget] = useState<StandingRow | null>(null)
   const [removing, setRemoving] = useState(false)
+  const [editTarget, setEditTarget] = useState<CenterDTO | null>(null)
+  const [editCode, setEditCode] = useState('')
+  const [editName, setEditName] = useState('')
+  const [editLocation, setEditLocation] = useState('')
+  const [saving, setSaving] = useState(false)
 
   if (loading && !detail) {
     return (
@@ -65,6 +80,32 @@ export function CentersView() {
   }
 
   const { centers, standings } = detail
+
+  const openEdit = (centerId: string) => {
+    const center = centers.find((c) => c.id === centerId)
+    if (!center) return
+    setEditTarget(center)
+    setEditCode(center.centerCode)
+    setEditName(center.centerName)
+    setEditLocation(center.location)
+  }
+
+  const doSaveEdit = async () => {
+    if (!editTarget || !editCode.trim()) return
+    setSaving(true)
+    const out = await updateCenter(editTarget.id, {
+      code: editCode.trim(),
+      name: editName.trim(),
+      location: editLocation.trim(),
+    })
+    setSaving(false)
+    if (out.ok) {
+      setEditTarget(null)
+      toast({ title: 'Center updated' })
+    } else {
+      toast({ title: 'Could not update the center', description: out.error, variant: 'destructive' })
+    }
+  }
 
   const doAddCenters = async () => {
     if (!centersText.trim()) return
@@ -87,6 +128,8 @@ export function CentersView() {
     setRemoveTarget(null)
     toast(ok ? { title: `Center ${removeTarget.centerCode} removed` } : { title: 'Could not remove the center', variant: 'destructive' })
   }
+
+  const locationByCode = new Map(centers.map((c) => [c.centerCode, c.location]))
 
   return (
     <motion.div
@@ -168,7 +211,14 @@ export function CentersView() {
                       className="hover:bg-muted/50 border-b transition-colors last:border-0"
                     >
                       <TableCell className="font-semibold tabular-nums">{row.centerCode}</TableCell>
-                      <TableCell className="text-muted-foreground">{row.centerName || '—'}</TableCell>
+                      <TableCell>
+                        <span className="text-muted-foreground">{row.centerName || '—'}</span>
+                        {locationByCode.get(row.centerCode) ? (
+                          <span className="block text-[11px] leading-tight text-muted-foreground/70">
+                            {locationByCode.get(row.centerCode)}
+                          </span>
+                        ) : null}
+                      </TableCell>
                       <TableCell className={cn('text-center font-semibold tabular-nums', medalText.gold)}>
                         <AnimatedNumber value={row.gold} />
                       </TableCell>
@@ -183,15 +233,26 @@ export function CentersView() {
                       </TableCell>
                       {isAdmin ? (
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={() => setRemoveTarget(row)}
-                            aria-label={`Remove center ${row.centerCode}`}
-                          >
-                            <Trash2 className="h-4 w-4" aria-hidden />
-                          </Button>
+                          <div className="flex items-center justify-end gap-0.5">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              onClick={() => openEdit(row.centerId)}
+                              aria-label={`Edit center ${row.centerCode}`}
+                            >
+                              <Pencil className="h-4 w-4" aria-hidden />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => setRemoveTarget(row)}
+                              aria-label={`Remove center ${row.centerCode}`}
+                            >
+                              <Trash2 className="h-4 w-4" aria-hidden />
+                            </Button>
+                          </div>
                         </TableCell>
                       ) : null}
                     </motion.tr>
@@ -202,6 +263,66 @@ export function CentersView() {
           </div>
         )}
       </div>
+
+      {/* Edit center dialog */}
+      <Dialog open={editTarget !== null} onOpenChange={(open) => !open && setEditTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit center {editTarget?.centerCode}</DialogTitle>
+            <DialogDescription>
+              The code appears on podiums, standings and every shared message.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="center-code">Center code</Label>
+              <Input
+                id="center-code"
+                value={editCode}
+                onChange={(e) => setEditCode(e.target.value)}
+                placeholder="402"
+                autoComplete="off"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="center-name">Name</Label>
+              <Input
+                id="center-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Galle Center"
+                autoComplete="off"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="center-location">Location</Label>
+              <Input
+                id="center-location"
+                value={editLocation}
+                onChange={(e) => setEditLocation(e.target.value)}
+                placeholder="Optional — shown on shared standings cards"
+                autoComplete="off"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTarget(null)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void doSaveEdit()}
+              disabled={saving || !editCode.trim()}
+            >
+              {saving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Check className="mr-2 h-4 w-4" aria-hidden />
+              )}
+              Save changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Remove center confirm */}
       <AlertDialog open={removeTarget !== null} onOpenChange={(open) => !open && setRemoveTarget(null)}>

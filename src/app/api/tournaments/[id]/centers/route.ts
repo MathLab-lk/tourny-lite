@@ -46,6 +46,67 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   }
 }
 
+/** Administrator only: edits a center's code, name or location. */
+export async function PATCH(req: NextRequest, ctx: Ctx) {
+  const guard = await requireRole('admin')
+  if (guard.response) return guard.response
+  const { id } = await ctx.params
+
+  try {
+    const body = await req.json()
+    if (!body.centerId) return NextResponse.json({ error: 'centerId required' }, { status: 400 })
+    const center = await db.center.findUnique({ where: { id: String(body.centerId) } })
+    if (!center || center.tournamentId !== id) {
+      return NextResponse.json({ error: 'Center not found' }, { status: 404 })
+    }
+
+    const data: { centerCode?: string; centerName?: string; location?: string } = {}
+    if (body.code !== undefined) {
+      const code = String(body.code).trim()
+      if (!code) {
+        return NextResponse.json(
+          { error: 'The center code cannot be empty' },
+          { status: 400 }
+        )
+      }
+      if (code !== center.centerCode) {
+        const dupe = await db.center.findUnique({
+          where: { tournamentId_centerCode: { tournamentId: id, centerCode: code } },
+          select: { id: true },
+        })
+        if (dupe) {
+          return NextResponse.json(
+            { error: `Center code ${code} is already taken in this tournament` },
+            { status: 409 }
+          )
+        }
+      }
+      data.centerCode = code
+    }
+    if (body.name !== undefined) data.centerName = String(body.name).trim()
+    if (body.location !== undefined) data.location = String(body.location).trim()
+
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
+    }
+
+    const updated = await db.center.update({ where: { id: center.id }, data })
+    emitTournamentChanged(id)
+    return NextResponse.json({
+      ok: true,
+      center: {
+        id: updated.id,
+        centerCode: updated.centerCode,
+        centerName: updated.centerName,
+        location: updated.location,
+      },
+    })
+  } catch (err) {
+    const { message, status } = friendlyError(err, 'Failed to update center')
+    return NextResponse.json({ error: message }, { status })
+  }
+}
+
 /** Administrator only: removes a participating center. */
 export async function DELETE(req: NextRequest, ctx: Ctx) {
   const guard = await requireRole('admin')

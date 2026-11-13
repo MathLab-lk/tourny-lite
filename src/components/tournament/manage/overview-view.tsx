@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Loader2, MessageCircle, Presentation, Printer } from 'lucide-react'
+import { Check, Loader2, Link2, MessageCircle, Presentation, Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store/app-store'
 import { useToast } from '@/hooks/use-toast'
@@ -20,7 +20,7 @@ import {
   staggerChild,
   staggerParent,
 } from '@/components/tournament/ui-bits'
-import { cn } from '@/lib/utils'
+import { cn, copyText } from '@/lib/utils'
 import type { EventDTO } from '@/lib/types'
 
 /**
@@ -43,6 +43,19 @@ export function OverviewView() {
 
   const [selectedEvent, setSelectedEvent] = useState<EventDTO | null>(null)
   const [sharing, setSharing] = useState(false)
+  const [linkCopied, setLinkCopied] = useState(false)
+
+  const copyGuestLink = async () => {
+    if (!activeId) return
+    const url = `${window.location.origin}/present/${activeId}`
+    const ok = await copyText(url)
+    if (ok) {
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 2000)
+    } else {
+      toast({ title: 'Copy failed', description: url, variant: 'destructive' })
+    }
+  }
 
   useEffect(() => {
     if (activeId) void loadAudit(activeId)
@@ -144,6 +157,20 @@ export function OverviewView() {
                 Share
               </Button>
             ) : null}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5"
+              onClick={() => void copyGuestLink()}
+              title="Copy the public link guests open to watch the live scoreboard"
+            >
+              {linkCopied ? (
+                <Check className="h-4 w-4 text-emerald-600" aria-hidden />
+              ) : (
+                <Link2 className="h-4 w-4" aria-hidden />
+              )}
+              {linkCopied ? 'Copied' : 'Guest link'}
+            </Button>
           </>
         }
       />

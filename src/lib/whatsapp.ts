@@ -37,6 +37,10 @@ export interface WhatsAppConfig {
   groupName: string
   /** Auto-send a message whenever a result is recorded (or corrected). */
   autoEvents: boolean
+  /** Where guests open shared links — the public address of this
+   *  app (e.g. https://tourny.example.lk). Empty = derive from the
+   *  request that triggers the share. */
+  publicBaseUrl: string
 }
 
 export interface WhatsAppPublicConfig {
@@ -48,6 +52,7 @@ export interface WhatsAppPublicConfig {
   autoEvents: boolean
   apiKeySet: boolean
   apiKeyHint: string
+  publicBaseUrl: string
 }
 
 export interface WahaSessionInfo {
@@ -72,6 +77,7 @@ function configFromEnv(): Partial<WhatsAppConfig> {
     session: process.env.WAHA_SESSION?.trim() ?? 'default',
     groupChatId: process.env.WAHA_GROUP_CHAT_ID?.trim() ?? '',
     autoEvents: process.env.WAHA_AUTO_EVENTS === 'true',
+    publicBaseUrl: normalizeBaseUrl(process.env.PUBLIC_BASE_URL ?? ''),
   }
 }
 
@@ -94,6 +100,7 @@ export async function getWhatsAppConfig(): Promise<WhatsAppConfig | null> {
         groupChatId: stored.groupChatId?.trim() ?? '',
         groupName: stored.groupName ?? '',
         autoEvents: stored.autoEvents === true,
+        publicBaseUrl: normalizeBaseUrl(stored.publicBaseUrl ?? ''),
       }
     } catch {
       // corrupted row — fall through to the env fallback
@@ -106,6 +113,7 @@ export async function getWhatsAppConfig(): Promise<WhatsAppConfig | null> {
     groupChatId: env.groupChatId ?? '',
     groupName: '',
     autoEvents: env.autoEvents === true,
+    publicBaseUrl: env.publicBaseUrl ?? '',
   }
   if (!merged.baseUrl || !merged.groupChatId) return null
   return merged
@@ -122,6 +130,7 @@ export async function saveWhatsAppConfig(
     groupChatId: '',
     groupName: '',
     autoEvents: false,
+    publicBaseUrl: '',
   }
   const next: WhatsAppConfig = {
     baseUrl: patch.baseUrl !== undefined ? normalizeBaseUrl(patch.baseUrl) : current.baseUrl,
@@ -134,6 +143,10 @@ export async function saveWhatsAppConfig(
     groupName: patch.groupName !== undefined ? patch.groupName : current.groupName,
     autoEvents:
       typeof patch.autoEvents === 'boolean' ? patch.autoEvents : current.autoEvents,
+    publicBaseUrl:
+      patch.publicBaseUrl !== undefined
+        ? normalizeBaseUrl(patch.publicBaseUrl)
+        : current.publicBaseUrl,
   }
   await db.appSetting.upsert({
     where: { key: SETTING_KEY },
@@ -155,7 +168,34 @@ export function toPublicConfig(cfg: WhatsAppConfig | null): WhatsAppPublicConfig
     autoEvents: cfg?.autoEvents === true,
     apiKeySet: Boolean(cfg?.apiKey),
     apiKeyHint: cfg?.apiKey ? `${cfg.apiKey.slice(0, 3)}…${cfg.apiKey.slice(-2)}` : '',
+    publicBaseUrl: cfg?.publicBaseUrl ?? '',
   }
+}
+
+// ── the guest scoreboard link ─────────────────────────────────
+
+/** Best-effort public origin of this deployment, taken from the
+ *  request that triggered the share: forwarded headers win behind
+ *  a proxy, otherwise the Host header is exactly the address the
+ *  sender's browser used — one their guests can use too. */
+export function originFromRequest(req: Request): string | null {
+  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host')
+  if (!host) return null
+  const proto = req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim() ?? 'http'
+  return `${proto}://${host}`
+}
+
+/** The public guest scoreboard link included with shared messages.
+ *  An explicit public base URL in the settings always wins; the
+ *  request origin is the fallback. Null when neither is known. */
+export function guestLink(
+  cfg: Pick<WhatsAppConfig, 'publicBaseUrl'>,
+  origin: string | null | undefined,
+  tournamentId: string
+): string | null {
+  const base = cfg.publicBaseUrl || (origin ?? '')
+  if (!base) return null
+  return `${base.replace(/\/+$/, '')}/present/${tournamentId}`
 }
 
 // ── WAHA HTTP client ──────────────────────────────────────────
@@ -301,11 +341,15 @@ function centerLabel(row: { centerCode: string; centerName: string }): string {
   return row.centerName ? `${row.centerName} (${row.centerCode})` : row.centerCode
 }
 
-function footer(detail: TournamentDetailDTO): string[] {
+function footer(
+  detail: TournamentDetailDTO,
+  opts?: { presentUrl?: string | null }
+): (string | null)[] {
   const { progress } = detail
   return [
     '',
     `✅ ${progress.completed} of ${progress.total} events completed`,
+    opts?.presentUrl ? `🔴 Watch live: ${opts.presentUrl}` : null,
     '_via Tourny Lite_',
   ]
 }
@@ -316,7 +360,10 @@ function render(lines: (string | null)[]): string {
 }
 
 /** Overall standings — one line per center that has scored. */
-export function buildStandingsMessage(detail: TournamentDetailDTO): string {
+export function buildStandingsMessage(
+  detail: TournamentDetailDTO,
+  opts?: { presentUrl?: string | null }
+): string {
   const { tournament, standings } = detail
   const scored = standings.filter((r) => r.total > 0)
   if (scored.length === 0) {
@@ -331,7 +378,7 @@ export function buildStandingsMessage(detail: TournamentDetailDTO): string {
     tournament.organizer ? `_by ${tournament.organizer}_` : null,
     '',
     ...lines,
-    ...footer(detail),
+    ...footer(detail, opts),
   ])
 }
 
@@ -346,7 +393,7 @@ function tableLine(detail: TournamentDetailDTO): string | null {
 export function buildEventMessage(
   detail: TournamentDetailDTO,
   eventId: string,
-  opts?: { isCorrection?: boolean }
+  opts?: { isCorrection?: boolean; presentUrl?: string | null }
 ): string {
   const { tournament, divisions, centers } = detail
   const event = detail.events.find((e) => e.id === eventId) as EventDTO | undefined
@@ -390,7 +437,7 @@ export function buildEventMessage(
     ...lines,
     '',
     tableLine(detail),
-    ...footer(detail),
+    ...footer(detail, opts),
   ])
 }
 
@@ -437,7 +484,7 @@ export async function shareEventResult(
   cfg: WhatsAppConfig,
   detail: TournamentDetailDTO,
   eventId: string,
-  opts?: { isCorrection?: boolean }
+  opts?: { isCorrection?: boolean; presentUrl?: string | null }
 ): Promise<ShareVia> {
   const via = await deliverCard(cfg, buildEventCard(detail, eventId, opts))
   if (via) return via
@@ -450,11 +497,12 @@ export async function shareEventResult(
 /** Shares the overall standings — the styled card, or the text list. */
 export async function shareStandings(
   cfg: WhatsAppConfig,
-  detail: TournamentDetailDTO
+  detail: TournamentDetailDTO,
+  opts?: { presentUrl?: string | null }
 ): Promise<ShareVia> {
-  const via = await deliverCard(cfg, buildStandingsCard(detail))
+  const via = await deliverCard(cfg, buildStandingsCard(detail, opts))
   if (via) return via
-  await sendWhatsAppText(cfg, buildStandingsMessage(detail))
+  await sendWhatsAppText(cfg, buildStandingsMessage(detail, opts))
   return 'text'
 }
 
@@ -467,14 +515,17 @@ export async function shareStandings(
 export async function autoShareEventResult(
   tournamentId: string,
   eventId: string,
-  opts: { isCorrection: boolean }
+  opts: { isCorrection: boolean; origin?: string | null }
 ): Promise<void> {
   try {
     const cfg = await getWhatsAppConfig()
     if (!cfg?.autoEvents) return
     const detail = await getTournamentDetail(tournamentId)
     if (!detail) return
-    await shareEventResult(cfg, detail, eventId, opts)
+    await shareEventResult(cfg, detail, eventId, {
+      isCorrection: opts.isCorrection,
+      presentUrl: guestLink(cfg, opts.origin, tournamentId),
+    })
   } catch (err) {
     console.error(
       '[whatsapp] auto-share failed:',

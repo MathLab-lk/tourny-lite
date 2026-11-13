@@ -835,8 +835,104 @@ async function main() {
     ok('battle-test codes cleaned up', (finalCheck.data?.invites ?? []).length === 0, finalCheck.data?.invites?.length)
   }
 
-  // ═══ 16. Sign out & cleanup ═══
-  section('16 · Sign out & cleanup')
+  // ═══ 16. Center editing ═══
+  section('16 · Center editing')
+  {
+    const before = await guest.call('GET', `/api/tournaments/${tournamentId}`)
+    const target = before.data.centers.find((c: any) => c.centerCode === '602')
+    ok('target center for editing exists', Boolean(target), target)
+
+    const guestEdit = await guest.call('PATCH', `/api/tournaments/${tournamentId}/centers`, {
+      centerId: target.id,
+      name: 'Nope',
+    })
+    ok('guest cannot edit a center', guestEdit.status === 401, guestEdit.status)
+
+    const judgeEdit = await judge.call('PATCH', `/api/tournaments/${tournamentId}/centers`, {
+      centerId: target.id,
+      name: 'Nope',
+    })
+    ok('scorekeeper cannot edit a center', judgeEdit.status === 403, judgeEdit.status)
+
+    const missing = await admin.call('PATCH', `/api/tournaments/${tournamentId}/centers`, {
+      centerId: 'no-such-center',
+      name: 'Ghost',
+    })
+    ok('editing a missing center returns 404', missing.status === 404, missing.status)
+
+    const wrongTournament = await admin.call('PATCH', `/api/tournaments/no-such-tournament/centers`, {
+      centerId: target.id,
+      name: 'Ghost',
+    })
+    ok('editing through the wrong tournament returns 404', wrongTournament.status === 404, wrongTournament.status)
+
+    const dupCode = await admin.call('PATCH', `/api/tournaments/${tournamentId}/centers`, {
+      centerId: target.id,
+      code: '101',
+    })
+    ok('duplicate code is rejected with 409', dupCode.status === 409, dupCode.status)
+
+    const emptyCode = await admin.call('PATCH', `/api/tournaments/${tournamentId}/centers`, {
+      centerId: target.id,
+      code: '   ',
+    })
+    ok('empty code is rejected', emptyCode.status === 400, emptyCode.status)
+
+    const nothing = await admin.call('PATCH', `/api/tournaments/${tournamentId}/centers`, {
+      centerId: target.id,
+    })
+    ok('a patch with no fields is rejected', nothing.status === 400, nothing.status)
+
+    const edit = await admin.call('PATCH', `/api/tournaments/${tournamentId}/centers`, {
+      centerId: target.id,
+      code: '612',
+      name: 'Matara Center',
+      location: 'Matara',
+    })
+    ok('admin edits code, name and location', edit.status === 200 && edit.data?.center?.centerCode === '612', edit.data)
+
+    const after = await guest.call('GET', `/api/tournaments/${tournamentId}`)
+    const edited = after.data.centers.find((c: any) => c.id === target.id)
+    ok(
+      'edits land in the detail (code, name, location)',
+      edited?.centerCode === '612' && edited?.centerName === 'Matara Center' && edited?.location === 'Matara',
+      edited
+    )
+    const standingsRow = after.data.standings.find((r: any) => r.centerId === target.id)
+    ok('standings carry the new code', standingsRow?.centerCode === '612', standingsRow)
+    const oldCodeGone = !after.data.centers.some((c: any) => c.centerCode === '602')
+    ok('old code is gone', oldCodeGone)
+  }
+
+  // ═══ 17. URL routes & public present page ═══
+  section('17 · URL routes & public present page')
+  {
+    const home = await guest.call('GET', '/')
+    ok('home route renders', home.status === 200, home.status)
+
+    const overview = await guest.call('GET', `/t/${tournamentId}`)
+    ok('tournament overview route renders', overview.status === 200, overview.status)
+
+    for (const view of ['scoring', 'centers', 'history', 'settings']) {
+      const r = await guest.call('GET', `/t/${tournamentId}/${view}`)
+      ok(`${view} route renders`, r.status === 200, r.status)
+    }
+
+    const badView = await guest.call('GET', `/t/${tournamentId}/bogus`)
+    ok('unknown view falls through to 404', badView.status === 404, badView.status)
+
+    const junk = await guest.call('GET', '/junk/path')
+    ok('unknown top-level path returns 404', junk.status === 404, junk.status)
+
+    const present = await guest.call('GET', `/present/${tournamentId}`)
+    ok('public present page renders', present.status === 200, present.status)
+
+    const presentGone = await guest.call('GET', '/present/does-not-exist')
+    ok('present page for a missing tournament 404s', presentGone.status === 404, presentGone.status)
+  }
+
+  // ═══ 18. Sign out & cleanup ═══
+  section('18 · Sign out & cleanup')
   {
     const out = await judge.call('POST', '/api/auth/logout')
     ok('signs out', out.status === 200, out)
