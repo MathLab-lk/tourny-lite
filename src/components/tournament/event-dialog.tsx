@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Loader2, Lock, RotateCcw, Save, Undo2 } from 'lucide-react'
+import { Loader2, Lock, MessageCircle, RotateCcw, Save, Undo2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -39,6 +39,7 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
   const submitResult = useAppStore((s) => s.submitResult)
   const resetResult = useAppStore((s) => s.resetResult)
   const setEventStatus = useAppStore((s) => s.setEventStatus)
+  const sendWhatsApp = useAppStore((s) => s.sendWhatsApp)
   const setAuthDialogOpen = useAppStore((s) => s.setAuthDialogOpen)
 
   const [podium, setPodium] = useState<PodiumValue>(() => ({
@@ -48,7 +49,7 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
   }))
   const [reason, setReason] = useState('')
   const [notes, setNotes] = useState(event?.result?.notes ?? '')
-  const [busy, setBusy] = useState<'save' | 'reset' | null>(null)
+  const [busy, setBusy] = useState<'save' | 'reset' | 'share' | null>(null)
   const [resetOpen, setResetOpen] = useState(false)
 
   // NOTE: this dialog is remounted via key={event.id} by the parent,
@@ -105,6 +106,20 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
   const changeStatus = async (status: string) => {
     const ok = await setEventStatus(event.id, status)
     if (ok) toast({ title: 'Status updated', description: `${event.label} — ${status.replace('_', ' ')}` })
+  }
+
+  const shareResult = async () => {
+    setBusy('share')
+    const out = await sendWhatsApp('event', {
+      tournamentId: detail.tournament.id,
+      eventId: event.id,
+    })
+    setBusy(null)
+    if (out.ok) {
+      toast({ title: 'Result shared', description: `Sent to ${out.groupName ?? 'the WhatsApp group'}.` })
+    } else {
+      toast({ title: 'Could not share the result', description: out.error, variant: 'destructive' })
+    }
   }
 
   return (
@@ -181,6 +196,22 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
                   {busy === 'save' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
                   {event.result ? 'Save correction' : 'Record result'}
                 </Button>
+                {event.result && isAdmin ? (
+                  <Button
+                    variant="ghost"
+                    className="gap-1.5"
+                    onClick={() => void shareResult()}
+                    disabled={busy !== null}
+                    title="Send this podium to the WhatsApp group"
+                  >
+                    {busy === 'share' ? (
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    ) : (
+                      <MessageCircle className="h-4 w-4" aria-hidden />
+                    )}
+                    Share
+                  </Button>
+                ) : null}
                 {event.result && isAdmin ? (
                   <Button variant="ghost" className="gap-1.5 text-destructive hover:text-destructive" onClick={() => setResetOpen((v) => !v)} disabled={busy !== null}>
                     <RotateCcw className="h-4 w-4" aria-hidden /> Reset…

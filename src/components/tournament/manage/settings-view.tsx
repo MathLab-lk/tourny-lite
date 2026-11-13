@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
 import { EmptyState, PageHeader } from '@/components/tournament/ui-bits'
+import { WhatsAppCard } from '@/components/tournament/manage/whatsapp-card'
 import { useAppStore } from '@/store/app-store'
 import { cn } from '@/lib/utils'
 import type { TournamentDetailDTO } from '@/lib/types'
@@ -187,6 +188,10 @@ function SettingsForm({
             </div>
           </CardContent>
         </Card>
+
+        {/* WhatsApp sharing — an app-level connection, not a
+            per-tournament setting, but administered from here. */}
+        <WhatsAppCard />
       </div>
     </div>
   )

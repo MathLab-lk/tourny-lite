@@ -172,3 +172,16 @@ model InvitationCode {
   usedById  String?   @unique
   usedBy    User?     @relation("InvitationRedemption", fields: [usedById], references: [id], onDelete: SetNull)
 }
+
+// ─────────────────────────────────────────────────────────────
+// App-level settings — small key/value store (JSON values) for
+// configuration that admins manage from the UI instead of env
+// vars (e.g. the WhatsApp sharing connection). Never holds data
+// that belongs to a single tournament.
+// ─────────────────────────────────────────────────────────────
+
+model AppSetting {
+  key       String   @id
+  value     String // JSON payload
+  updatedAt DateTime @updatedAt
+}

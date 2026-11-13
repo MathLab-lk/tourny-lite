@@ -91,8 +91,8 @@ async function main() {
     const session = await guest.call('GET', '/api/auth/session')
     ok('session endpoint responds', session.status === 200, session)
     ok(
-      session.data.setupRequired === true || session.data.setupRequired === false,
-      'setupRequired flag present'
+      'setupRequired flag present',
+      session.data.setupRequired === true || session.data.setupRequired === false
     )
 
     initialIds = (await guest.call('GET', '/api/tournaments')).data?.tournaments?.map(

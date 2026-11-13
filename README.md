@@ -31,7 +31,7 @@ Run an entire event from one lightweight application:
 | --- | --- |
 | **Guest** (no account) | View tournaments, standings, the scoreboard, the event grid and the revision history |
 | **Scorekeeper** | Record and correct results, manage event status |
-| **Administrator** | Everything: create / duplicate / delete tournaments, manage centers, reset results, settings, team accounts |
+| **Administrator** | Everything: create / duplicate / delete tournaments, manage centers, reset results, settings, team accounts, WhatsApp sharing |
 
 The first account created becomes the administrator (first-run setup);
 further accounts are added from *Team & access* — either created directly
@@ -70,6 +70,27 @@ sheets slide with an overshoot ease, and live results morph chips and
 count up standings in place. All of it respects
 `prefers-reduced-motion`.
 
+### WhatsApp sharing
+
+Share results to a WhatsApp group through a self-hosted
+[WAHA](https://waha.devlike.pro) server (WhatsApp HTTP API):
+
+1. In *Settings → WhatsApp sharing*, enter the WAHA server address and
+   its API key, then *Connect* — the app verifies the connection and
+   lists the WhatsApp sessions on that server.
+2. Pick the connected session and the destination group, and *Save the
+   connection*. The API key is stored app-side and never returned to the
+   browser; a *Send test message* probe confirms the wiring end to end.
+3. Share from anywhere: *Share* on the Overview sends the overall
+   standings; *Share* inside any recorded event sends that podium
+   (medals, centers and points). Both land in the group as formatted
+   WhatsApp text.
+
+The connected WhatsApp account must be a member of the destination
+group. Headless deployments can pre-configure the connection with
+`WAHA_BASE_URL`, `WAHA_API_KEY`, `WAHA_SESSION` and `WAHA_GROUP_CHAT_ID`
+instead of the Settings UI.
+
 ## Technology
 
 Next.js 16 (App Router, standalone output) · TypeScript · Prisma + SQLite
@@ -94,7 +115,9 @@ the template tournament from the home screen.
 With the dev server running:
 
 ```bash
-bun run scripts/battle-test.ts
+bun run scripts/battle-test.ts          # core suite — 127 assertions
+bun run scripts/waha-mock.ts 3001 &     # mock WAHA server
+BASE_URL=http://localhost:3000 bun run scripts/whatsapp-test.ts
 ```
 
 The battle suite exercises authentication, role enforcement (guest /
@@ -102,7 +125,13 @@ scorekeeper / administrator), invitation codes (generation, expiry,
 single-use redemption, role grants), tournament lifecycle, result
 guardrails and standings mathematics, corrections and the audit trail,
 center management, the live event stream, concurrent submissions and
-account management — 127 assertions in total.
+account management.
+
+The WhatsApp suite covers access control on every endpoint, config
+save/masking, session + group discovery, all three message kinds
+(delivered payloads are inspected), and error mapping for wrong keys,
+unreachable servers and unrecorded events — against the bundled WAHA
+mock, so no real group is messaged while testing.
 
 ## Deployment
 

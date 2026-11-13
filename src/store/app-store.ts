@@ -125,6 +125,10 @@ interface AppState {
   submitResult: (payload: ResultSubmitPayload) => Promise<{ ok: boolean; queued: boolean; error?: string }>
   resetResult: (eventId: string, reason: string) => Promise<boolean>
   setEventStatus: (eventId: string, status: string) => Promise<boolean>
+  sendWhatsApp: (
+    kind: 'test' | 'standings' | 'event',
+    opts?: { tournamentId?: string; eventId?: string }
+  ) => Promise<{ ok: boolean; groupName?: string; error?: string }>
   addCenters: (centersText: string) => Promise<boolean>
   removeCenter: (centerId: string) => Promise<boolean>
   loadAudit: (tournamentId: string) => Promise<void>
@@ -491,6 +495,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       return true
     } catch {
       return false
+    }
+  },
+
+  // ── WhatsApp sharing (admin, configured in Settings) ─────
+
+  sendWhatsApp: async (kind, opts) => {
+    try {
+      const data = await api<{ ok: boolean; groupName?: string }>('/api/whatsapp/send', {
+        method: 'POST',
+        body: JSON.stringify({ kind, ...opts }),
+      })
+      return { ok: true, groupName: data.groupName }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'The message could not be sent.' }
     }
   },
 

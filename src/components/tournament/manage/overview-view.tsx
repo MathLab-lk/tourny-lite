@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Presentation, Printer } from 'lucide-react'
+import { Loader2, MessageCircle, Presentation, Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store/app-store'
 import { useToast } from '@/hooks/use-toast'
@@ -37,8 +37,12 @@ export function OverviewView() {
   const printSheet = useAppStore((s) => s.printSheet)
   const openScoreboard = useAppStore((s) => s.openScoreboard)
   const setView = useAppStore((s) => s.setView)
+  const session = useAppStore((s) => s.session)
+  const isAdmin = session?.role === 'admin'
+  const sendWhatsApp = useAppStore((s) => s.sendWhatsApp)
 
   const [selectedEvent, setSelectedEvent] = useState<EventDTO | null>(null)
+  const [sharing, setSharing] = useState(false)
 
   useEffect(() => {
     if (activeId) void loadAudit(activeId)
@@ -77,6 +81,18 @@ export function OverviewView() {
     }
   }
 
+  const shareStandings = async () => {
+    if (!activeId) return
+    setSharing(true)
+    const out = await sendWhatsApp('standings', { tournamentId: activeId })
+    setSharing(false)
+    if (out.ok) {
+      toast({ title: 'Standings shared', description: `Sent to ${out.groupName ?? 'the WhatsApp group'}.` })
+    } else {
+      toast({ title: 'Could not share the standings', description: out.error, variant: 'destructive' })
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -108,6 +124,23 @@ export function OverviewView() {
             <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={doPrint}>
               <Printer className="h-4 w-4" aria-hidden /> Print
             </Button>
+            {isAdmin ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5"
+                onClick={() => void shareStandings()}
+                disabled={sharing}
+                title="Send the standings to the WhatsApp group"
+              >
+                {sharing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <MessageCircle className="h-4 w-4" aria-hidden />
+                )}
+                Share
+              </Button>
+            ) : null}
           </>
         }
       />
