@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/auth'
 import { getTournamentDetail } from '@/lib/tournament-service'
 import {
   buildTestMessage,
+  eventLink,
   getWhatsAppConfig,
   guestLink,
   originFromRequest,
@@ -50,14 +51,17 @@ export async function POST(req: NextRequest) {
     } else if (kind === 'standings') {
       const detail = await getTournamentDetail(String(body.tournamentId ?? ''))
       if (!detail) return NextResponse.json({ error: 'Tournament not found.' }, { status: 404 })
+      // Standings point at the overall guest scoreboard.
       via = await shareStandings(cfg, detail, {
         presentUrl: guestLink(cfg, origin, detail.tournament.id),
       })
     } else {
       const detail = await getTournamentDetail(String(body.tournamentId ?? ''))
       if (!detail) return NextResponse.json({ error: 'Tournament not found.' }, { status: 404 })
-      via = await shareEventResult(cfg, detail, String(body.eventId ?? ''), {
-        presentUrl: guestLink(cfg, origin, detail.tournament.id),
+      const eventId = String(body.eventId ?? '')
+      // An event podium points at that event's own live page.
+      via = await shareEventResult(cfg, detail, eventId, {
+        eventUrl: eventLink(cfg, origin, detail.tournament.id, eventId),
       })
     }
 

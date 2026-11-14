@@ -285,16 +285,17 @@ function footer(detail: TournamentDetailDTO, y: number): { svg: string; bottom: 
 }
 
 /** The guest link bar — a lit glass pill inviting the group to
- *  open the live scoreboard. The full URL rides along in the image
- *  caption (where WhatsApp makes it tappable); the bar shows it
- *  without the protocol so it stays as large as possible. */
-function watchLiveBar(y: number, url: string): { svg: string; bottom: number } {
+ *  open the live scoreboard (`live`, the overall standings page) or
+ *  this result's own page (`result`). The full URL rides along in
+ *  the image caption (where WhatsApp makes it tappable); the bar
+ *  shows it without the protocol so it stays as large as possible. */
+function watchLiveBar(y: number, url: string, kind: 'live' | 'result' = 'live'): { svg: string; bottom: number } {
   const H = 92
   const padX = 26
-  const playR = 15
-  const playCx = M + padX + playR
-  const labelX = playCx + playR + 20
-  const label = 'WATCH LIVE'
+  const icoR = 15
+  const icoCx = M + padX + icoR
+  const labelX = icoCx + icoR + 20
+  const label = kind === 'result' ? 'VIEW RESULT' : 'WATCH LIVE'
   const labelW = width(label, 'semibold', 26, 3)
   // A clear gap + a faint divider keeps the label and the address
   // from running together when the URL is long.
@@ -303,14 +304,24 @@ function watchLiveBar(y: number, url: string): { svg: string; bottom: number } {
   const urlMax = W - M - padX - urlX
   const display = url.replace(/^https?:\/\//, '')
   const fitted = fit(display, 'medium', 29, urlMax, 22)
+  // Play triangle for the live scoreboard; a podium glyph for a
+  // single event's result page.
+  const icon =
+    kind === 'result'
+      ? [
+          `<rect x="${icoCx - 11}" y="${y + H / 2 - 3}" width="6.5" height="10" rx="1.6" fill="#FFFFFF" opacity="0.62"/>`,
+          `<rect x="${icoCx - 3.25}" y="${y + H / 2 - 10}" width="6.5" height="17" rx="1.6" fill="#FFFFFF"/>`,
+          `<rect x="${icoCx + 4.5}" y="${y + H / 2 - 1}" width="6.5" height="8" rx="1.6" fill="#FFFFFF" opacity="0.62"/>`,
+        ].join('')
+      : `<path d="M ${icoCx - 5} ${y + H / 2 - 7} L ${icoCx + 8} ${y + H / 2} L ${icoCx - 5} ${y + H / 2 + 7} Z" fill="#FFFFFF"/>`
   return {
     svg: [
       `<rect x="${M + 6}" y="${y + 12}" width="${CW - 12}" height="${H}" rx="${H / 2}" fill="#06070B" opacity="0.5" filter="url(#fSoft)"/>`,
       `<rect x="${M}" y="${y}" width="${CW}" height="${H}" rx="${H / 2}" fill="url(#gWatch)" fill-opacity="0.96"/>`,
       `<rect x="${M}" y="${y}" width="${CW}" height="${H}" rx="${H / 2}" fill="none" stroke="#4E8FCB" stroke-opacity="0.55" stroke-width="2"/>`,
       `<rect x="${M + 18}" y="${y + 3}" width="${CW - 36}" height="3" rx="1.5" fill="#FFFFFF" opacity="0.12"/>`,
-      `<circle cx="${playCx}" cy="${y + H / 2}" r="${playR}" fill="#FFFFFF" opacity="0.26"/>`,
-      `<path d="M ${playCx - 5} ${y + H / 2 - 7} L ${playCx + 8} ${y + H / 2} L ${playCx - 5} ${y + H / 2 + 7} Z" fill="#FFFFFF"/>`,
+      `<circle cx="${icoCx}" cy="${y + H / 2}" r="${icoR}" fill="#FFFFFF" opacity="0.26"/>`,
+      icon,
       text(label, { x: labelX, y: baseline(y, H, 26), size: 26, weight: 'semibold', fill: '#FFFFFF', letterSpacing: 3 }),
       `<rect x="${Math.round(labelX + labelW + gap / 2)}" y="${y + H / 2 - 14}" width="2" height="28" rx="1" fill="#FFFFFF" opacity="0.45"/>`,
       text(fitted.text, { x: urlX, y: baseline(y, H, fitted.size), size: fitted.size, weight: 'medium', fill: ACCENT_URL }),
@@ -367,7 +378,7 @@ function podiumRow(
 export function buildEventCard(
   detail: TournamentDetailDTO,
   eventId: string,
-  opts?: { isCorrection?: boolean; presentUrl?: string | null }
+  opts?: { isCorrection?: boolean; eventUrl?: string | null }
 ): ShareCard | null {
   const { tournament, divisions, centers } = detail
   const event = detail.events.find((e) => e.id === eventId) as EventDTO | undefined
@@ -455,8 +466,8 @@ export function buildEventCard(
     y += 110
   }
 
-  if (opts?.presentUrl) {
-    const bar = watchLiveBar(y + 22, opts.presentUrl)
+  if (opts?.eventUrl) {
+    const bar = watchLiveBar(y + 22, opts.eventUrl, 'result')
     parts.push(bar.svg)
     quiet.push([y + 4, bar.bottom])
     y = bar.bottom + 12
@@ -471,7 +482,7 @@ export function buildEventCard(
     svg: svgDocument(foot.bottom, parts.join('\n'), quiet),
     caption:
       `${isCorrection ? '🔁 Corrected result' : '🏁 Event result'} · ${tournament.name} · ${event.gameName} (${category})` +
-      (opts?.presentUrl ? `\n${opts.presentUrl}` : ''),
+      (opts?.eventUrl ? `\n${opts.eventUrl}` : ''),
   }
 }
 

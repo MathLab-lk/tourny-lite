@@ -440,8 +440,8 @@ async function main() {
       text.text
     )
     ok(
-      'fallback text carries the watch-live link',
-      Boolean(text.text?.includes(`🔴 Watch live: https://tourny.example.lk/present/`)),
+      'fallback text carries the event page link',
+      Boolean(text.text?.includes(`🔴 View result: https://tourny.example.lk/present/${seeded.id}/event/${done.id}`)),
       text.text
     )
 
@@ -497,10 +497,11 @@ async function main() {
     ok('one message delivered', lines.length === before + 1, lines.length - before)
     const last = lines[lines.length - 1]
     ok(
-      'caption carries the origin-derived guest link',
-      Boolean((last.caption ?? '').includes(`${BASE}/present/${seeded.id}`)),
+      'caption carries the origin-derived guest link to this event',
+      Boolean((last.caption ?? '').includes(`${BASE}/present/${seeded.id}/event/${done.id}`)),
       last.caption
     )
+    ok('event card draws the view-result bar', (last.imageBytes ?? 0) > 0, last.caption)
   }
 
   // ═══ 9. Auto-share on recorded results ═══
@@ -551,8 +552,8 @@ async function main() {
       autoMsg
     )
     ok(
-      'auto-share caption carries the guest link (from the recording request)',
-      Boolean((autoMsg.caption ?? '').includes(`${BASE}/present/${seeded.id}`)),
+      'auto-share caption carries the guest link to this event (from the recording request)',
+      Boolean((autoMsg.caption ?? '').includes(`${BASE}/present/${seeded.id}/event/${open.id}`)),
       autoMsg.caption
     )
 
@@ -720,13 +721,14 @@ async function main() {
     ok('cards without a link carry no watch-live bar', !standings?.svg.includes('WATCH LIVE') && !standings?.caption.includes('/present/'), standings?.caption)
 
     const url = 'https://tourny.example.lk/present/t1'
-    const liveEvent = buildEventCard(mkDetail(), 'e1', { presentUrl: url })
+    const eventUrl = 'https://tourny.example.lk/present/t1/event/e1'
+    const liveEvent = buildEventCard(mkDetail(), 'e1', { eventUrl })
     ok(
-      'event card with a link draws the watch-live bar (protocol stripped for size)',
-      Boolean(liveEvent?.svg.includes('WATCH LIVE') && liveEvent.svg.includes('tourny.example.lk/present/t1') && !liveEvent.svg.includes('https://tourny.example.lk')),
+      'event card with a link draws the view-result bar (protocol stripped for size)',
+      Boolean(liveEvent?.svg.includes('VIEW RESULT') && liveEvent.svg.includes('tourny.example.lk/present/t1/event/e1') && !liveEvent.svg.includes('https://tourny.example.lk')),
       liveEvent?.caption
     )
-    ok('event card caption carries the full link', (liveEvent?.caption ?? '').endsWith(url), liveEvent?.caption)
+    ok('event card caption carries the full event link', (liveEvent?.caption ?? '').endsWith(eventUrl), liveEvent?.caption)
 
     const liveStandings = buildStandingsCard(mkDetail(), { presentUrl: url })
     ok(

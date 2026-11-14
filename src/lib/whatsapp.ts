@@ -198,6 +198,19 @@ export function guestLink(
   return `${base.replace(/\/+$/, '')}/present/${tournamentId}`
 }
 
+/** The public page for one event — where an event-result message
+ *  points its guests: the podium of that single event, live. */
+export function eventLink(
+  cfg: Pick<WhatsAppConfig, 'publicBaseUrl'>,
+  origin: string | null | undefined,
+  tournamentId: string,
+  eventId: string
+): string | null {
+  const overall = guestLink(cfg, origin, tournamentId)
+  if (!overall) return null
+  return `${overall}/event/${eventId}`
+}
+
 // ── WAHA HTTP client ──────────────────────────────────────────
 
 export class WahaError extends Error {
@@ -343,13 +356,13 @@ function centerLabel(row: { centerCode: string; centerName: string }): string {
 
 function footer(
   detail: TournamentDetailDTO,
-  opts?: { presentUrl?: string | null }
+  opts?: { link?: { label: string; url: string } }
 ): (string | null)[] {
   const { progress } = detail
   return [
     '',
     `✅ ${progress.completed} of ${progress.total} events completed`,
-    opts?.presentUrl ? `🔴 Watch live: ${opts.presentUrl}` : null,
+    opts?.link ? `🔴 ${opts.link.label}: ${opts.link.url}` : null,
     '_via Tourny Lite_',
   ]
 }
@@ -378,7 +391,9 @@ export function buildStandingsMessage(
     tournament.organizer ? `_by ${tournament.organizer}_` : null,
     '',
     ...lines,
-    ...footer(detail, opts),
+    ...footer(detail, {
+      link: opts?.presentUrl ? { label: 'Watch live', url: opts.presentUrl } : undefined,
+    }),
   ])
 }
 
@@ -393,7 +408,7 @@ function tableLine(detail: TournamentDetailDTO): string | null {
 export function buildEventMessage(
   detail: TournamentDetailDTO,
   eventId: string,
-  opts?: { isCorrection?: boolean; presentUrl?: string | null }
+  opts?: { isCorrection?: boolean; eventUrl?: string | null }
 ): string {
   const { tournament, divisions, centers } = detail
   const event = detail.events.find((e) => e.id === eventId) as EventDTO | undefined
@@ -437,7 +452,9 @@ export function buildEventMessage(
     ...lines,
     '',
     tableLine(detail),
-    ...footer(detail, opts),
+    ...footer(detail, {
+      link: opts?.eventUrl ? { label: 'View result', url: opts.eventUrl } : undefined,
+    }),
   ])
 }
 
@@ -484,7 +501,7 @@ export async function shareEventResult(
   cfg: WhatsAppConfig,
   detail: TournamentDetailDTO,
   eventId: string,
-  opts?: { isCorrection?: boolean; presentUrl?: string | null }
+  opts?: { isCorrection?: boolean; eventUrl?: string | null }
 ): Promise<ShareVia> {
   const via = await deliverCard(cfg, buildEventCard(detail, eventId, opts))
   if (via) return via
@@ -522,9 +539,11 @@ export async function autoShareEventResult(
     if (!cfg?.autoEvents) return
     const detail = await getTournamentDetail(tournamentId)
     if (!detail) return
+    // Event announcements carry the guest link to that event's own
+    // page — the podium the message is about, live.
     await shareEventResult(cfg, detail, eventId, {
       isCorrection: opts.isCorrection,
-      presentUrl: guestLink(cfg, opts.origin, tournamentId),
+      eventUrl: eventLink(cfg, opts.origin, tournamentId, eventId),
     })
   } catch (err) {
     console.error(

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Award, Crown, Expand, Medal, Trophy, Wifi, WifiOff } from 'lucide-react'
+import { Award, ChevronRight, Crown, Expand, Medal, Trophy, Wifi, WifiOff } from 'lucide-react'
 import { AnimatedNumber } from '@/components/tournament/ui-bits'
 import { cn } from '@/lib/utils'
 import type { TournamentDetailDTO } from '@/lib/types'
@@ -221,40 +221,48 @@ export function PresentBoard({ id }: { id: string }) {
               </div>
             ) : null}
 
-            {/* Latest result — the "what just happened" strip */}
+            {/* Latest result — the "what just happened" strip; opens
+                that event's own live page */}
             <AnimatePresence initial={false} mode="wait">
               {latest && latest.result ? (
-                <motion.div
+                <motion.a
                   key={latest.result.updatedAt}
+                  href={`/present/${id}/event/${latest.id}`}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.3 }}
-                  className="mx-auto mt-7 max-w-3xl rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-center backdrop-blur"
+                  className="mx-auto mt-7 flex max-w-3xl items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-left backdrop-blur transition-colors hover:border-amber-400/40 hover:bg-white/[0.09]"
                 >
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-zinc-500">
-                    Latest result
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-white sm:text-base">
-                    {latest.gameName}
-                    <span className="font-normal text-zinc-400">
-                      {' '}
-                      · Cat {latest.divisionCode}
-                      {latest.subEventIndex > 1 ? ` · Slot ${latest.subEventIndex}` : ''}
+                  <span className="min-w-0 flex-1 text-center">
+                    <span className="block text-[10px] font-semibold uppercase tracking-[0.25em] text-zinc-500">
+                      Latest result
                     </span>
-                  </p>
-                  <p className="mt-1.5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm font-semibold">
-                    {latest.result.firstPlaceCode ? (
-                      <span className="text-amber-400">🥇 {latest.result.firstPlaceCode}</span>
-                    ) : null}
-                    {latest.result.secondPlaceCode ? (
-                      <span className="text-zinc-300">🥈 {latest.result.secondPlaceCode}</span>
-                    ) : null}
-                    {latest.result.thirdPlaceCode ? (
-                      <span className="text-orange-400">🥉 {latest.result.thirdPlaceCode}</span>
-                    ) : null}
-                  </p>
-                </motion.div>
+                    <span className="mt-1 block text-sm font-semibold text-white sm:text-base">
+                      {latest.gameName}
+                      <span className="font-normal text-zinc-400">
+                        {' '}
+                        · Cat {latest.divisionCode}
+                        {latest.subEventIndex > 1 ? ` · Slot ${latest.subEventIndex}` : ''}
+                      </span>
+                    </span>
+                    <span className="mt-1.5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm font-semibold">
+                      {latest.result.firstPlaceCode ? (
+                        <span className="text-amber-400">🥇 {latest.result.firstPlaceCode}</span>
+                      ) : null}
+                      {latest.result.secondPlaceCode ? (
+                        <span className="text-zinc-300">🥈 {latest.result.secondPlaceCode}</span>
+                      ) : null}
+                      {latest.result.thirdPlaceCode ? (
+                        <span className="text-orange-400">🥉 {latest.result.thirdPlaceCode}</span>
+                      ) : null}
+                    </span>
+                  </span>
+                  <ChevronRight
+                    className="h-5 w-5 shrink-0 text-zinc-500 transition-colors"
+                    aria-hidden
+                  />
+                </motion.a>
               ) : null}
             </AnimatePresence>
 

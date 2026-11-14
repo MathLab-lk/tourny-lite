@@ -37,9 +37,17 @@ const cards: [name: string, card: ReturnType<typeof buildEventCard> | ReturnType
   ['event', full ? buildEventCard(d, full.id) : null],
   ['event-partial', partial ? buildEventCard(d, partial.id) : null],
   ['standings', buildStandingsCard(d)],
-  // With the guest link — what the group actually receives when
-  // a public base URL is configured.
-  ['event-live', full ? buildEventCard(d, full.id, { presentUrl: 'http://192.168.8.50:3000/present/cmvinbk7c0002n6cc4x9abcs' }) : null],
+  // With the guest links — what the group actually receives when a
+  // public base URL is configured. Event podiums point at that
+  // event's own live page; standings at the overall scoreboard.
+  [
+    'event-live',
+    full
+      ? buildEventCard(d, full.id, {
+          eventUrl: `http://192.168.8.50:3000/present/cmvinbk7c0002n6cc4x9abcs/event/${full.id}`,
+        })
+      : null,
+  ],
   ['standings-live', buildStandingsCard(d, { presentUrl: 'http://192.168.8.50:3000/present/cmvinbk7c0002n6cc4x9abcs' })],
 ]
 

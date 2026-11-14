@@ -342,9 +342,10 @@ export function WhatsAppCard() {
             autoComplete="url"
           />
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            Every shared message carries a link to the live guest scoreboard. Leave empty to
-            use the address you are browsing from; set it when guests reach this server
-            through a different address (a domain or a tunnel).
+            Every shared message carries a guest link: event podiums open that event's own live
+            page, standings open the full scoreboard. Leave empty to use the address you are
+            browsing from; set it when guests reach this server through a different address (a
+            domain or a tunnel).
           </p>
         </div>
 
