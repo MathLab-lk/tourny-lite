@@ -36,6 +36,11 @@ const ACCENT = '#6FAEE8'
 const ACCENT_URL = '#D9E8F8'
 const PANEL_EDGE = '#5A6A8C'
 const COIN_EDGE = '#7C8BAD'
+// The event accent — gold marks a single event's podium (the glow
+// of victory); steel blue stays the voice of the overall standings.
+// One color per story, so the group tells them apart at a glance.
+const GOLD = '#E9C64A'
+const GOLD_EDGE = '#D9B44A'
 
 const LATIN = 'Poppins, Noto Sans Sinhala, sans-serif'
 const SINHALA = 'Noto Sans Sinhala, Poppins, sans-serif'
@@ -187,6 +192,8 @@ function defs(): string {
   return [
     `<defs>`,
     `<linearGradient id="gBg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1A1C25"/><stop offset="1" stop-color="#12131A"/></linearGradient>`,
+    `<radialGradient id="gGlowGold" cx="0.5" cy="0" r="0.85"><stop offset="0" stop-color="#E9C64A" stop-opacity="0.09"/><stop offset="1" stop-color="#E9C64A" stop-opacity="0"/></radialGradient>`,
+    `<radialGradient id="gGlowBlue" cx="0.5" cy="0" r="0.85"><stop offset="0" stop-color="#4A8FD0" stop-opacity="0.1"/><stop offset="1" stop-color="#4A8FD0" stop-opacity="0"/></radialGradient>`,
     `<linearGradient id="gPanel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3B465E"/><stop offset="1" stop-color="#2A3242"/></linearGradient>`,
     `<linearGradient id="gEdge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8FA3C8" stop-opacity="0.9"/><stop offset="1" stop-color="#8FA3C8" stop-opacity="0.28"/></linearGradient>`,
     `<linearGradient id="gWatch" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22588B"/><stop offset="1" stop-color="#17466E"/></linearGradient>`,
@@ -202,12 +209,15 @@ function defs(): string {
 /** A glass panel — soft ambient shadow, translucent body (the
  *  starfield shows through), a light border that is brighter along
  *  the top edge, and a specular top rim. The signature surface of
- *  the theme. */
-function panel(x: number, y: number, w: number, h: number, rx = 30): string {
+ *  the theme. `edge` overrides the border (the champion's gold). */
+function panel(x: number, y: number, w: number, h: number, rx = 30, edge?: string): string {
+  const border = edge
+    ? `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="none" stroke="${edge}" stroke-opacity="0.85" stroke-width="2"/>`
+    : `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="none" stroke="url(#gEdge)" stroke-width="2"/>`
   return [
     `<rect x="${x + 8}" y="${y + 14}" width="${w - 16}" height="${h}" rx="${rx}" fill="#06070B" opacity="0.55" filter="url(#fSoft)"/>`,
     `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="url(#gPanel)" fill-opacity="0.82"/>`,
-    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="none" stroke="url(#gEdge)" stroke-width="2"/>`,
+    border,
     `<rect x="${x + 16}" y="${y + 2}" width="${Math.max(0, w - 32)}" height="3" rx="1.5" fill="#FFFFFF" opacity="0.16"/>`,
   ].join('\n')
 }
@@ -246,9 +256,9 @@ function medalBadge(cx: number, cy: number, r: number, rank: 1 | 2 | 3): string 
   ].join('')
 }
 
-/** Title block on the night sky — eyebrow, tournament name and
- *  organizer, closed by a hairline. No colored band: the whole
- *  card is one continuous dark canvas, like the app. */
+/** Title block on the night sky for the standings card — blue
+ *  eyebrow, the tournament as the hero (it is the story there),
+ *  organizer below, closed by a hairline. */
 function masthead(eyebrow: string, title: string, organizer: string): { svg: string; bottom: number } {
   const parts: string[] = [
     text(eyebrow, { x: M, y: 124, size: 30, weight: 'semibold', fill: ACCENT, letterSpacing: 7 }),
@@ -261,6 +271,40 @@ function masthead(eyebrow: string, title: string, organizer: string): { svg: str
   }
   parts.push(`<rect x="${M}" y="292" width="${CW}" height="2" rx="1" fill="#FFFFFF" opacity="0.08"/>`)
   return { svg: parts.join('\n'), bottom: 294 }
+}
+
+/** Header for the event card — there the game is the story, so it
+ *  leads: gold eyebrow, the game name as the hero, its Sinhala
+ *  name, then the tournament and organizer as one quiet context
+ *  line. Someone glancing at the thumbnail reads who won what
+ *  before anything else. */
+function eventHeader(
+  eyebrow: string,
+  game: string,
+  sinhala: string,
+  tournament: string,
+  organizer: string
+): { svg: string; bottom: number; quiet: Array<[number, number]> } {
+  const quiet: Array<[number, number]> = []
+  const parts: string[] = [
+    text(eyebrow, { x: M, y: 124, size: 30, weight: 'semibold', fill: GOLD, letterSpacing: 7 }),
+  ]
+  const hero = fit(game, 'semibold', 64, CW, 46)
+  parts.push(text(hero.text, { x: M, y: 190 + (64 - hero.size) / 2, size: hero.size, weight: 'semibold', fill: INK }))
+  let y = 248
+  if (sinhala.trim()) {
+    const si = fit(sinhala.trim(), 'regular', 38, CW, 30)
+    parts.push(text(si.text, { x: M, y: y + (38 - si.size) / 2, size: si.size, weight: 'regular', fill: SINHALA_INK, sinhala: true }))
+    quiet.push([y - 34, y + 12])
+    y += 52
+  }
+  const context = [tournament, organizer.trim()].filter(Boolean).join('  ·  ')
+  const ctx = fit(context, 'regular', 30, CW, 24)
+  parts.push(text(ctx.text, { x: M, y: y + (30 - ctx.size) / 2, size: ctx.size, weight: 'regular', fill: MUTED }))
+  quiet.push([y - 28, y + 10])
+  y += 46
+  parts.push(`<rect x="${M}" y="${y}" width="${CW}" height="2" rx="1" fill="#FFFFFF" opacity="0.08"/>`)
+  return { svg: parts.join('\n'), bottom: y + 2, quiet }
 }
 
 /** Progress bar, brand wordmark and date — shared footer. */
@@ -330,44 +374,56 @@ function watchLiveBar(y: number, url: string, kind: 'live' | 'result' = 'live'):
   }
 }
 
-function svgDocument(height: number, body: string, quietBands: Array<[number, number]> = []): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}">\n${defs()}\n<rect width="${W}" height="${height}" fill="url(#gBg)"/>\n${starfield(W, height, quietBands)}\n${body}\n</svg>`
+function svgDocument(
+  height: number,
+  body: string,
+  quietBands: Array<[number, number]> = [],
+  glow: 'gold' | 'blue' = 'blue'
+): string {
+  const glowRect = `<rect width="${W}" height="${height}" fill="url(#gGlow${glow === 'gold' ? 'Gold' : 'Blue'})"/>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}">\n${defs()}\n<rect width="${W}" height="${height}" fill="url(#gBg)"/>\n${glowRect}\n${starfield(W, height, quietBands)}\n${body}\n</svg>`
 }
 
-/** A podium row — medal coin, center identity, points.
- *  Centers without a name get their code as a big, confident
- *  team-number (small pills would leave the row feeling empty). */
+/** A podium row — medal coin, center identity, points. The
+ *  champion's row is taller with a larger coin and a gold rim, so
+ *  the eye lands on the winner first; silver and bronze read as
+ *  the supporting cast. Centers without a name get their code as a
+ *  big, confident team-number. */
 function podiumRow(
   top: number,
   rank: 1 | 2 | 3,
   place: { code: string; name: string; location?: string },
   pts: number
 ): { svg: string; bottom: number } {
-  const H = 140
-  const badgeX = M + 30 + 42
-  const nameX = M + 134
+  const champ = rank === 1
+  const H = champ ? 176 : 140
+  const r = champ ? 50 : 42
+  const badgeX = M + 28 + r
+  const nameX = M + 28 + 2 * r + (champ ? 26 : 24)
   const pointsEnd = W - M - 30
   const nameMax = pointsEnd - 200 - nameX
   const parts: string[] = [
-    panel(M, top, CW, H, 28),
-    medalBadge(badgeX, top + H / 2, 42, rank),
+    panel(M, top, CW, H, 28, champ ? GOLD_EDGE : undefined),
+    medalBadge(badgeX, top + H / 2, r, rank),
   ]
   if (place.name) {
-    const f = fit(place.name, 'medium', 36, nameMax, 28)
-    parts.push(text(f.text, { x: nameX, y: top + 54, size: f.size, weight: 'medium', fill: INK }))
-    const c = chip(place.code, nameX, top + 72, { height: 48 })
+    const f = fit(place.name, champ ? 'semibold' : 'medium', champ ? 42 : 36, nameMax, champ ? 32 : 28)
+    parts.push(text(f.text, { x: nameX, y: champ ? top + 66 : top + 54, size: f.size, weight: champ ? 'semibold' : 'medium', fill: INK }))
+    const c = chip(place.code, nameX, champ ? top + 84 : top + 72, { height: champ ? 52 : 48 })
     if (c) parts.push(c.svg)
   } else if (place.location) {
-    parts.push(text(place.code, { x: nameX, y: top + 62, size: 40, weight: 'semibold', fill: INK }))
+    parts.push(text(place.code, { x: nameX, y: champ ? top + 76 : top + 62, size: champ ? 46 : 40, weight: 'semibold', fill: INK }))
     const loc = fit(place.location, 'regular', 26, nameMax, 22)
-    parts.push(text(loc.text, { x: nameX, y: top + 102, size: loc.size, weight: 'regular', fill: MUTED }))
+    parts.push(text(loc.text, { x: nameX, y: champ ? top + 120 : top + 102, size: loc.size, weight: 'regular', fill: MUTED }))
   } else {
-    parts.push(text(place.code, { x: nameX, y: top + 84, size: 40, weight: 'semibold', fill: INK }))
+    parts.push(text(place.code, { x: nameX, y: champ ? top + 104 : top + 84, size: champ ? 46 : 40, weight: 'semibold', fill: INK }))
   }
+  const big = champ ? 52 : 46
+  const small = champ ? 28 : 26
   parts.push(
-    `<text x="${pointsEnd}" y="${top + 76}" text-anchor="end" font-family="${LATIN}">` +
-      `<tspan font-size="46" font-weight="600" fill="${INK}">${pts}</tspan>` +
-      `<tspan dx="9" font-size="26" font-weight="400" fill="${MUTED}">pts</tspan>` +
+    `<text x="${pointsEnd}" y="${top + H / 2 + (champ ? 18 : 12)}" text-anchor="end" font-family="${LATIN}">` +
+      `<tspan font-size="${big}" font-weight="600" fill="${INK}">${pts}</tspan>` +
+      `<tspan dx="9" font-size="${small}" font-weight="400" fill="${MUTED}">pts</tspan>` +
       `</text>`
   )
   return { svg: parts.join('\n'), bottom: top + H }
@@ -401,21 +457,18 @@ export function buildEventCard(
   const eyebrow = isCorrection ? 'CORRECTED RESULT' : 'EVENT RESULT'
 
   const parts: string[] = []
-  const quiet: Array<[number, number]> = [[218, 268]] // organizer line
-  const head = masthead(eyebrow, tournament.name, tournament.organizer)
+  const quiet: Array<[number, number]> = []
+  const head = eventHeader(
+    eyebrow,
+    event.gameName,
+    event.gameSinhalaName,
+    tournament.name,
+    tournament.organizer
+  )
   parts.push(head.svg)
-  let y = head.bottom + 76
+  quiet.push(...head.quiet)
+  let y = head.bottom + 54
 
-  const game = fit(event.gameName, 'semibold', 62, CW, 40)
-  parts.push(text(game.text, { x: M, y, size: game.size, weight: 'semibold', fill: INK }))
-  if (event.gameSinhalaName) {
-    y += 58
-    const si = fit(event.gameSinhalaName, 'regular', 40, CW, 32)
-    parts.push(text(si.text, { x: M, y, size: si.size, weight: 'regular', fill: SINHALA_INK, sinhala: true }))
-    quiet.push([y - 34, y + 10])
-  }
-
-  y += 42
   const chips: string[] = []
   let chipX = M
   const chipTop = y
@@ -432,7 +485,7 @@ export function buildEventCard(
   }
   parts.push(chips.join('\n'))
   quiet.push([chipTop - 12, chipTop + 70])
-  y = chipTop + 58 + 36
+  y = chipTop + 58 + 30
 
   const medalPts = [tournament.pointsFirst, tournament.pointsSecond, tournament.pointsThird]
   for (const { code, rank } of places) {
@@ -444,17 +497,19 @@ export function buildEventCard(
       medalPts[rank - 1]
     )
     parts.push(row.svg)
-    y = row.bottom + 16
+    y = row.bottom + (rank === 1 ? 18 : 16)
   }
   y += 22
 
+  // The quiet overall line — the top of the table without the
+  // podium fanfare: names and points, nothing else.
   const scored = detail.standings.filter((r) => r.total > 0)
   if (scored.length > 0) {
     const top = scored.slice(0, 3)
-    parts.push(text('OVERALL STANDINGS — TOTAL POINTS', { x: M, y: y + 24, size: 23, weight: 'semibold', fill: FAINT, letterSpacing: 5 }))
+    parts.push(text('OVERALL STANDINGS', { x: M, y: y + 24, size: 23, weight: 'semibold', fill: FAINT, letterSpacing: 5 }))
     const line = fit(
       top
-        .map((r, i) => `${i + 1}. ${r.centerName ? `${r.centerName} (${r.centerCode})` : r.centerCode} — ${r.total} pts`)
+        .map((r, i) => `${i + 1}. ${r.centerName || r.centerCode} ${r.total} pts`)
         .join('  ·  '),
       'medium',
       31,
@@ -479,7 +534,7 @@ export function buildEventCard(
 
   const category = division ? `Cat ${division.code}` : `Cat ${event.divisionCode}`
   return {
-    svg: svgDocument(foot.bottom, parts.join('\n'), quiet),
+    svg: svgDocument(foot.bottom, parts.join('\n'), quiet, 'gold'),
     caption:
       `${isCorrection ? '🔁 Corrected result' : '🏁 Event result'} · ${tournament.name} · ${event.gameName} (${category})` +
       (opts?.eventUrl ? `\n${opts.eventUrl}` : ''),
@@ -500,7 +555,7 @@ export function buildStandingsCard(
 
   const parts: string[] = []
   const quiet: Array<[number, number]> = [[218, 268]] // organizer line
-  const head = masthead('STANDINGS', tournament.name, tournament.organizer)
+  const head = masthead('OVERALL STANDINGS', tournament.name, tournament.organizer)
   parts.push(head.svg)
   let y = head.bottom + 46
 
@@ -512,6 +567,11 @@ export function buildStandingsCard(
   for (const row of shown) {
     const H = 112
     parts.push(panel(M, y, CW, H, 28))
+    // The leader carries a small gold tab on the left edge — who is
+    // winning overall is the one question every reader brings.
+    if (row.rank === 1) {
+      parts.push(`<rect x="${M + 5}" y="${y + 26}" width="5" height="${H - 52}" rx="2.5" fill="url(#gGold)"/>`)
+    }
     if (row.rank <= 3) {
       parts.push(medalBadge(M + 26 + 36, y + H / 2, 36, row.rank as 1 | 2 | 3))
     } else {

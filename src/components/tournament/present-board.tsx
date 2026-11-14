@@ -266,8 +266,26 @@ export function PresentBoard({ id }: { id: string }) {
               ) : null}
             </AnimatePresence>
 
-            {/* Leaderboard — table on screens, stacked cards on phones */}
-            <div className="mt-8 [perspective:1400px]">
+            {/* Leaderboard — table on screens, stacked cards on phones.
+                The section label says what this page is (the overall
+                standings, not one event) before a single row is read. */}
+            <div className="mt-10">
+              <div className="mb-3 flex items-center justify-between px-1">
+                <h2 className="text-[11px] font-semibold uppercase tracking-[0.3em] text-zinc-500">
+                  Overall standings
+                </h2>
+                {updatedAt ? (
+                  <span className="text-[11px] tabular-nums text-zinc-500">
+                    Updated{' '}
+                    {new Date(updatedAt).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                    })}
+                  </span>
+                ) : null}
+              </div>
+              <div className="[perspective:1400px]">
               <motion.div
                 initial={{ rotateX: -9, y: 28, opacity: 0 }}
                 animate={{ rotateX: 0, y: 0, opacity: 1 }}
@@ -398,6 +416,7 @@ export function PresentBoard({ id }: { id: string }) {
                   ) : null}
                 </div>
               </motion.div>
+              </div>
             </div>
 
             {/* Footer meta */}
@@ -406,19 +425,6 @@ export function PresentBoard({ id }: { id: string }) {
                 <Trophy className="h-3.5 w-3.5" aria-hidden />
                 Tie-break order: total, then first, second and third places
               </span>
-              {updatedAt ? (
-                <>
-                  <span aria-hidden>·</span>
-                  <span className="tabular-nums">
-                    Updated{' '}
-                    {new Date(updatedAt).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                    })}
-                  </span>
-                </>
-              ) : null}
             </p>
             <p className="mt-3 text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-zinc-600">
               Tourny Lite

@@ -203,19 +203,22 @@ export function PresentEventBoard({ id, eventId }: { id: string; eventId: string
               </h2>
             </motion.header>
 
-            {/* The event — identity card */}
+            {/* The event — identity card, gold-framed: this page is
+                about one event's podium, and says so before you read
+                a word */}
             <motion.section
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.08 }}
-              className="mt-7 rounded-2xl border border-white/10 bg-zinc-900/60 p-5 text-center shadow-2xl shadow-black/60 backdrop-blur sm:p-7"
+              className="mt-7 rounded-2xl border border-amber-400/30 bg-zinc-900/60 bg-gradient-to-b from-amber-400/[0.07] to-transparent p-5 text-center shadow-2xl shadow-black/60 backdrop-blur sm:p-7"
             >
               <p
                 className={cn(
-                  'text-[10px] font-semibold uppercase tracking-[0.3em] sm:text-xs',
+                  'flex items-center justify-center gap-2 text-[10px] font-semibold uppercase tracking-[0.3em] sm:text-xs',
                   event.result ? 'text-amber-400/90' : 'text-zinc-500'
                 )}
               >
+                <Trophy className="h-3.5 w-3.5" aria-hidden />
                 {event.result ? (corrected ? 'Corrected result' : 'Event result') : 'Result pending'}
               </p>
               <h1 className="mt-2 text-balance text-3xl font-semibold tracking-tight text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.6)] sm:text-5xl">
@@ -256,6 +259,7 @@ export function PresentEventBoard({ id, eventId }: { id: string; eventId: string
                   >
                     {places.map(({ code, rank, pts }, i) => {
                       const center = centerByCode.get(code)
+                      const champ = rank === 1
                       const skins = {
                         1: 'from-amber-300 to-amber-600 ring-amber-500/60 shadow-[0_0_28px_rgba(251,191,36,0.35)]',
                         2: 'from-zinc-200 to-zinc-500 ring-zinc-400/50 shadow-[0_0_24px_rgba(228,228,231,0.22)]',
@@ -268,25 +272,40 @@ export function PresentEventBoard({ id, eventId }: { id: string; eventId: string
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.18 + i * 0.12, duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
                           className={cn(
-                            'flex items-center gap-4 rounded-2xl border border-white/10 bg-zinc-900/60 p-4 shadow-2xl shadow-black/60 backdrop-blur sm:gap-5 sm:p-5',
-                            rank === 1 && 'border-amber-400/25'
+                            'flex items-center gap-4 rounded-2xl border bg-zinc-900/60 p-4 shadow-2xl shadow-black/60 backdrop-blur sm:gap-5',
+                            champ
+                              ? 'border-amber-400/40 bg-gradient-to-r from-amber-400/[0.08] to-transparent p-5 sm:p-6'
+                              : 'border-white/10 p-4 sm:p-5'
                           )}
                         >
                           <span
                             className={cn(
-                              'flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-xl font-bold ring-2 sm:h-16 sm:w-16 sm:text-2xl',
+                              'flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br font-bold ring-2',
                               skins,
+                              champ
+                                ? 'h-16 w-16 text-2xl sm:h-20 sm:w-20 sm:text-3xl'
+                                : 'h-14 w-14 text-xl sm:h-16 sm:w-16 sm:text-2xl',
                               rank === 1 ? 'text-amber-950' : rank === 2 ? 'text-zinc-700' : 'text-orange-950'
                             )}
                           >
                             {rank}
                           </span>
                           <span className="min-w-0 flex-1">
-                            <span className="block text-2xl font-semibold tabular-nums tracking-wide text-white sm:text-4xl">
+                            <span
+                              className={cn(
+                                'block font-semibold tabular-nums tracking-wide text-white',
+                                champ ? 'text-3xl sm:text-5xl' : 'text-2xl sm:text-4xl'
+                              )}
+                            >
                               {code}
                             </span>
                             {center?.centerName ? (
-                              <span className="block truncate text-sm text-zinc-300 sm:text-base">
+                              <span
+                                className={cn(
+                                  'block truncate',
+                                  champ ? 'text-base text-zinc-200 sm:text-lg' : 'text-sm text-zinc-300 sm:text-base'
+                                )}
+                              >
                                 {center.centerName}
                               </span>
                             ) : null}
@@ -295,9 +314,19 @@ export function PresentEventBoard({ id, eventId }: { id: string; eventId: string
                                 {center.location}
                               </span>
                             ) : null}
+                            {champ ? (
+                              <span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.25em] text-amber-300/90">
+                                Champion
+                              </span>
+                            ) : null}
                           </span>
                           <span className="shrink-0 text-right">
-                            <span className="block text-2xl font-semibold text-white tabular-nums sm:text-4xl">
+                            <span
+                              className={cn(
+                                'block font-semibold text-white tabular-nums',
+                                champ ? 'text-3xl sm:text-5xl' : 'text-2xl sm:text-4xl'
+                              )}
+                            >
                               <AnimatedNumber value={pts} />
                             </span>
                             <span className="block text-[10px] uppercase tracking-wider text-zinc-500">

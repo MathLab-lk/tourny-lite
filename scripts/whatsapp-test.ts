@@ -718,6 +718,36 @@ async function main() {
       Boolean(standings?.svg.includes('Kaduwela Center') && standings.svg.includes('>105<') && standings.svg.includes('TOURNY LITE')),
       standings?.caption
     )
+    ok(
+      'event and standings cards are visually distinct (gold event accent vs blue standings accent)',
+      Boolean(
+        card?.svg.includes('fill="#E9C64A"') &&
+          !standings?.svg.includes('fill="#E9C64A"') &&
+          standings.svg.includes('fill="#6FAEE8"') &&
+          !card.svg.includes('fill="#6FAEE8"')
+      ),
+      'accent check'
+    )
+    ok(
+      'event card leads with the game name; the tournament is context',
+      Boolean(
+        card && card.svg.indexOf('Bahugunaka Puwaruwa') >= 0 && card.svg.indexOf('Math Competition 2026') >= 0 &&
+          card.svg.indexOf('Bahugunaka Puwaruwa') < card.svg.indexOf('Math Competition 2026')
+      ),
+      'hierarchy check'
+    )
+    ok(
+      'event card glows gold, standings card glows blue',
+      Boolean(card?.svg.includes('fill="url(#gGlowGold)"') && standings?.svg.includes('fill="url(#gGlowBlue)"')),
+      'glow check'
+    )
+    ok('event champion row is emphasized (taller, gold rim)', Boolean(card?.svg.includes('stroke="#D9B44A"')), 'champion rim')
+    ok(
+      'standings leader carries the gold tab',
+      Boolean(standings?.svg.includes('width="5" height="60" rx="2.5" fill="url(#gGold)"')),
+      'leader tab'
+    )
+    ok('standings eyebrow reads OVERALL STANDINGS', Boolean(standings?.svg.includes('OVERALL STANDINGS')), 'eyebrow')
     ok('cards without a link carry no watch-live bar', !standings?.svg.includes('WATCH LIVE') && !standings?.caption.includes('/present/'), standings?.caption)
 
     const url = 'https://tourny.example.lk/present/t1'
