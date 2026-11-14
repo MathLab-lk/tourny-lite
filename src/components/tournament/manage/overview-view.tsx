@@ -222,7 +222,7 @@ export function OverviewView() {
                   <th key={g.id} className="p-2.5 text-center text-xs font-medium text-muted-foreground">
                     {g.englishName}
                     {g.sinhalaName ? (
-                      <span className="block text-[10px] font-normal opacity-70 sinhala">{g.sinhalaName}</span>
+                      <span className="block text-[10px] font-normal text-muted-foreground sinhala">{g.sinhalaName}</span>
                     ) : null}
                   </th>
                 ))}

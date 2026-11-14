@@ -83,7 +83,7 @@ export function PresentBoard({ id }: { id: string }) {
   const rankStyle = (rank: number) => {
     if (rank === 1) return 'border-l-amber-400 bg-gradient-to-r from-amber-400/15 to-transparent'
     if (rank === 2) return 'border-l-zinc-400 bg-gradient-to-r from-zinc-400/10 to-transparent'
-    if (rank === 3) return 'border-l-orange-700 bg-gradient-to-r from-orange-700/15 to-transparent'
+    if (rank === 3) return 'border-l-amber-700 bg-gradient-to-r from-amber-700/15 to-transparent'
     return 'border-l-transparent'
   }
 
@@ -101,8 +101,11 @@ export function PresentBoard({ id }: { id: string }) {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      {/* Layered atmosphere: gold spotlight, cool counter-glow, vignette, grain */}
+    <div className="dark min-h-screen bg-zinc-950 text-zinc-100">
+      {/* Layered atmosphere: the app's starfield (full strength in the
+          dark scope), gold spotlight, cool counter-glow, vignette, grain */}
+      <div className="stars fixed" aria-hidden />
+      <div className="stars-twinkle fixed" aria-hidden />
       <div
         className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,rgba(251,191,36,0.09),transparent_55%)]"
         aria-hidden
@@ -227,7 +230,7 @@ export function PresentBoard({ id }: { id: string }) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.3 }}
-                  className="mx-auto mt-7 max-w-3xl rounded-xl border border-white/10 bg-zinc-900/60 px-4 py-3 text-center backdrop-blur"
+                  className="mx-auto mt-7 max-w-3xl rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-center backdrop-blur"
                 >
                   <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-zinc-500">
                     Latest result
@@ -314,13 +317,13 @@ export function PresentBoard({ id }: { id: string }) {
                         <td className="px-4 py-4 text-zinc-300 sm:px-6">
                           {row.centerName || <span className="text-zinc-500">—</span>}
                         </td>
-                        <td className="px-4 py-4 text-center text-xl font-semibold text-amber-400 sm:px-6">
+                        <td className={cn('px-4 py-4 text-center text-xl font-semibold sm:px-6', row.gold > 0 ? 'text-amber-400' : 'text-zinc-600')}>
                           <AnimatedNumber value={row.gold} />
                         </td>
-                        <td className="px-4 py-4 text-center text-xl font-semibold text-zinc-200 sm:px-6">
+                        <td className={cn('px-4 py-4 text-center text-xl font-semibold sm:px-6', row.silver > 0 ? 'text-zinc-200' : 'text-zinc-600')}>
                           <AnimatedNumber value={row.silver} />
                         </td>
-                        <td className="px-4 py-4 text-center text-xl font-semibold text-orange-400 sm:px-6">
+                        <td className={cn('px-4 py-4 text-center text-xl font-semibold sm:px-6', row.bronze > 0 ? 'text-orange-400' : 'text-zinc-600')}>
                           <AnimatedNumber value={row.bronze} />
                         </td>
                         <td className="px-4 py-4 text-right sm:px-6">

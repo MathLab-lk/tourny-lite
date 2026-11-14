@@ -12,6 +12,9 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  // The dev-tools badge sits exactly under the floating glass chrome
+  // (bottom-left) and reads as a stray error chip in screenshots.
+  devIndicators: false,
 };
 
 export default nextConfig;

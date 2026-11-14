@@ -179,8 +179,10 @@ function SettingsForm({
                   size="sm"
                   variant={tournament.status === st ? 'default' : 'outline'}
                   className="capitalize"
-                  disabled={settingStatus || tournament.status === st}
-                  onClick={() => void setStatus(st)}
+                  disabled={settingStatus}
+                  onClick={() => {
+                    if (tournament.status !== st) void setStatus(st)
+                  }}
                 >
                   {st}
                 </Button>

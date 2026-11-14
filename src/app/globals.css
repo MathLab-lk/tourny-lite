@@ -52,107 +52,129 @@
 }
 
 /*
- * Tourny Lite design system — "quiet depth".
- * A calm, layered surface world: one emerald accent, deep translucent
- * chrome over a slowly drifting aurora, hairline borders, tabular
- * numerals. Motion is spring-based and purposeful; medal tones appear
- * only where podium semantics require them.
+ * Tourny Lite design system — "liquid glass".
+ * Deep-space glass surfaces floating over a slow nebula and a
+ * starfield: translucent steel-blue panels, hairline light borders,
+ * specular top rims, one steel-blue accent. Motion is spring-based
+ * and purposeful; medal tones appear only where podium semantics
+ * require them.
  */
 
 :root {
-  --radius: 0.625rem;
+  --radius: 1rem;
 
-  /* Light — sage-tinted paper */
-  --background: oklch(0.982 0.005 148);
-  --foreground: oklch(0.19 0.01 160);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.19 0.01 160);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.19 0.01 160);
+  /* Light — bright silver glass over cool paper */
+  --background: oklch(0.977 0.005 250);
+  --foreground: oklch(0.215 0.02 265);
+  --card: oklch(1 0 0 / 64%);
+  --card-foreground: oklch(0.215 0.02 265);
+  --popover: oklch(1 0 0 / 90%);
+  --popover-foreground: oklch(0.215 0.02 265);
 
-  /* Deep emerald accent — the only brand color */
-  --primary: oklch(0.52 0.128 162);
-  --primary-foreground: oklch(0.985 0.01 160);
-  --secondary: oklch(0.957 0.006 150);
-  --secondary-foreground: oklch(0.31 0.012 155);
-  --muted: oklch(0.957 0.006 150);
-  --muted-foreground: oklch(0.46 0.014 155);
-  --accent: oklch(0.938 0.024 162);
-  --accent-foreground: oklch(0.34 0.065 163);
+  /* Steel blue — the only brand color */
+  --primary: oklch(0.51 0.115 246);
+  --primary-foreground: oklch(0.985 0.005 250);
+  --secondary: oklch(0.955 0.01 250 / 82%);
+  --secondary-foreground: oklch(0.31 0.035 262);
+  --muted: oklch(0.955 0.01 250 / 78%);
+  --muted-foreground: oklch(0.47 0.025 265);
+  --accent: oklch(0.935 0.022 244);
+  --accent-foreground: oklch(0.35 0.08 250);
 
   --destructive: oklch(0.577 0.215 27);
-  --border: oklch(0.905 0.008 150);
-  --input: oklch(0.878 0.009 150);
-  --ring: oklch(0.62 0.128 162);
+  --border: oklch(0.5 0.045 265 / 17%);
+  --input: oklch(0.5 0.045 265 / 24%);
+  --ring: oklch(0.58 0.115 246);
 
-  --chart-1: oklch(0.52 0.128 162);
+  --chart-1: oklch(0.51 0.115 246);
   --chart-2: oklch(0.75 0.15 85);
   --chart-3: oklch(0.62 0.08 260);
   --chart-4: oklch(0.66 0.15 45);
   --chart-5: oklch(0.55 0.1 200);
 
-  --sidebar: oklch(0.975 0.006 150);
-  --sidebar-foreground: oklch(0.185 0.01 160);
-  --sidebar-primary: oklch(0.52 0.128 162);
-  --sidebar-primary-foreground: oklch(0.985 0.01 160);
-  --sidebar-accent: oklch(0.938 0.024 162);
-  --sidebar-accent-foreground: oklch(0.34 0.065 163);
-  --sidebar-border: oklch(0.905 0.008 150);
-  --sidebar-ring: oklch(0.62 0.128 162);
+  --sidebar: oklch(0.985 0.007 250);
+  --sidebar-foreground: oklch(0.215 0.02 265);
+  --sidebar-primary: oklch(0.51 0.115 246);
+  --sidebar-primary-foreground: oklch(0.985 0.005 250);
+  --sidebar-accent: oklch(0.935 0.022 244);
+  --sidebar-accent-foreground: oklch(0.35 0.08 250);
+  --sidebar-border: oklch(0.5 0.045 265 / 17%);
+  --sidebar-ring: oklch(0.58 0.115 246);
 
-  /* Ambient layers — very quiet in light mode */
-  --glow: oklch(0.72 0.15 163 / 0.4);
-  --aurora-1: oklch(0.72 0.16 163 / 0.17);
-  --aurora-2: oklch(0.78 0.11 205 / 0.13);
-  --aurora-3: oklch(0.84 0.12 85 / 0.09);
-  --noise-opacity: 0.022;
+  /* Ambient layers — a whisper of the sky by day */
+  --glow: oklch(0.6 0.12 246 / 0.35);
+  --aurora-1: oklch(0.74 0.09 240 / 0.16);
+  --aurora-2: oklch(0.76 0.08 300 / 0.11);
+  --aurora-3: oklch(0.8 0.07 210 / 0.13);
+  --stars-opacity: 0.45;
+  --stars-twinkle: 0;
+  --vignette: 0;
+  --noise-opacity: 0.02;
+
+  /* Frost values — declared as custom properties because the CSS
+     compiler rewrites literal `backdrop-filter` values to the
+     -webkit- prefixed form only (which current Chrome drops),
+     silently killing the blur. Var()-valued declarations pass
+     through untouched — same trick Tailwind's own backdrop-*
+     utilities use. */
+  --frost-strong: blur(24px) saturate(1.6);
+  --frost: blur(20px) saturate(1.5);
+  /* Separate names for the -webkit- declarations: when both forms
+     carry the identical token the CSS compiler merges the pair into
+     the prefixed form only, which current Chrome drops. Different
+     names prevent the merge, so both survive. */
+  --frost-strong-w: blur(24px) saturate(1.6);
+  --frost-w: blur(20px) saturate(1.5);
 }
 
 .dark {
-  /* Rich deep green-black with layered depth */
-  --background: oklch(0.128 0.006 168);
-  --foreground: oklch(0.958 0.005 160);
-  --card: oklch(0.174 0.009 168);
-  --card-foreground: oklch(0.958 0.005 160);
-  --popover: oklch(0.188 0.009 168);
-  --popover-foreground: oklch(0.958 0.005 160);
+  /* Deep space — blue-charcoal with layered depth */
+  --background: oklch(0.168 0.018 277);
+  --foreground: oklch(0.962 0.005 270);
+  --card: oklch(0.28 0.034 272 / 50%);
+  --card-foreground: oklch(0.962 0.005 270);
+  --popover: oklch(0.24 0.03 272 / 88%);
+  --popover-foreground: oklch(0.962 0.005 270);
 
-  /* Brightened emerald for dark surfaces */
-  --primary: oklch(0.8 0.172 160);
-  --primary-foreground: oklch(0.16 0.05 165);
-  --secondary: oklch(0.236 0.009 168);
-  --secondary-foreground: oklch(0.958 0.005 160);
-  --muted: oklch(0.222 0.008 168);
-  --muted-foreground: oklch(0.677 0.012 163);
-  --accent: oklch(0.262 0.028 164);
-  --accent-foreground: oklch(0.878 0.085 162);
+  /* Bright steel blue for dark glass */
+  --primary: oklch(0.78 0.088 244);
+  --primary-foreground: oklch(0.235 0.05 262);
+  --secondary: oklch(0.28 0.03 272 / 68%);
+  --secondary-foreground: oklch(0.962 0.005 270);
+  --muted: oklch(0.28 0.028 272 / 55%);
+  --muted-foreground: oklch(0.7 0.02 272);
+  --accent: oklch(0.35 0.058 255 / 78%);
+  --accent-foreground: oklch(0.9 0.05 240);
 
   --destructive: oklch(0.666 0.19 25);
-  --border: oklch(1 0 0 / 8.5%);
-  --input: oklch(1 0 0 / 13%);
-  --ring: oklch(0.62 0.128 162);
+  --border: oklch(1 0 0 / 11.5%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.68 0.1 244);
 
-  --chart-1: oklch(0.8 0.172 160);
+  --chart-1: oklch(0.78 0.088 244);
   --chart-2: oklch(0.8 0.15 85);
   --chart-3: oklch(0.65 0.12 260);
   --chart-4: oklch(0.7 0.14 45);
   --chart-5: oklch(0.62 0.11 200);
 
-  --sidebar: oklch(0.16 0.008 168);
-  --sidebar-foreground: oklch(0.958 0.005 160);
-  --sidebar-primary: oklch(0.8 0.172 160);
-  --sidebar-primary-foreground: oklch(0.16 0.05 165);
-  --sidebar-accent: oklch(0.262 0.028 164);
-  --sidebar-accent-foreground: oklch(0.878 0.085 162);
-  --sidebar-border: oklch(1 0 0 / 8.5%);
-  --sidebar-ring: oklch(0.62 0.128 162);
+  --sidebar: oklch(0.225 0.03 275);
+  --sidebar-foreground: oklch(0.962 0.005 270);
+  --sidebar-primary: oklch(0.78 0.088 244);
+  --sidebar-primary-foreground: oklch(0.235 0.05 262);
+  --sidebar-accent: oklch(0.35 0.058 255 / 78%);
+  --sidebar-accent-foreground: oklch(0.9 0.05 240);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.68 0.1 244);
 
   /* Ambient layers — alive at night */
-  --glow: oklch(0.8 0.172 160 / 0.38);
-  --aurora-1: oklch(0.58 0.17 163 / 0.3);
-  --aurora-2: oklch(0.52 0.13 215 / 0.24);
-  --aurora-3: oklch(0.72 0.14 85 / 0.13);
-  --noise-opacity: 0.05;
+  --glow: oklch(0.72 0.1 244 / 0.42);
+  --aurora-1: oklch(0.5 0.15 268 / 0.24);
+  --aurora-2: oklch(0.45 0.13 305 / 0.16);
+  --aurora-3: oklch(0.55 0.11 215 / 0.11);
+  --stars-opacity: 1;
+  --stars-twinkle: 1;
+  --vignette: 0.22;
+  --noise-opacity: 0.045;
 }
 
 @layer base {
@@ -219,7 +241,7 @@
 
 /* ── Ambient background ─────────────────────────────────────── */
 
-/* Slowly drifting aurora blobs behind the app. Pure transform
+/* Slowly drifting nebula blobs behind the app. Pure transform
    animation on one fixed, composited layer — cheap on the GPU. */
 .aurora {
   position: fixed;
@@ -276,6 +298,52 @@
   to { transform: translate3d(-13%, 11%, 0) scale(1.24); }
 }
 
+/* Starfield — a constellation of glowing dots with hairline
+   connections, tiled across the viewport. Two stacked layers
+   breathe on offset periods so the sky never pulses in unison.
+   Pure opacity animation on fixed layers — composited, no paint. */
+.stars,
+.stars-twinkle {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-repeat: repeat;
+}
+.stars {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='880' height='880'%3E%3Cg fill='none' stroke='%237A8DBD' stroke-width='1'%3E%3Cpath d='M48 96 L206 128 L318 216' opacity='.10'/%3E%3Cpath d='M404 78 L546 148 L624 130' opacity='.12'/%3E%3Cpath d='M250 404 L362 500 L458 348' opacity='.09'/%3E%3Cpath d='M590 452 L668 470' opacity='.11'/%3E%3Cpath d='M96 540 L150 700' opacity='.08'/%3E%3Cpath d='M742 420 L830 540 L778 764' opacity='.10'/%3E%3Cpath d='M120 430 L48 96' opacity='.07'/%3E%3C/g%3E%3Cg%3E%3Ccircle cx='96' cy='540' r='9' fill='%239FB2D8' opacity='.09'/%3E%3Ccircle cx='96' cy='540' r='2.8' fill='%239FB2D8' opacity='.55'/%3E%3Ccircle cx='404' cy='78' r='8' fill='%23C4CFE8' opacity='.10'/%3E%3Ccircle cx='404' cy='78' r='2.6' fill='%23C4CFE8' opacity='.48'/%3E%3Ccircle cx='590' cy='452' r='10' fill='%239FB2D8' opacity='.08'/%3E%3Ccircle cx='590' cy='452' r='2.7' fill='%239FB2D8' opacity='.52'/%3E%3Ccircle cx='708' cy='700' r='8' fill='%238A7BA8' opacity='.09'/%3E%3Ccircle cx='708' cy='700' r='2.5' fill='%238A7BA8' opacity='.55'/%3E%3Ccircle cx='396' cy='388' r='9' fill='%23C4CFE8' opacity='.08'/%3E%3Ccircle cx='396' cy='388' r='2.9' fill='%23C4CFE8' opacity='.60'/%3E%3Ccircle cx='624' cy='130' r='8' fill='%239FB2D8' opacity='.09'/%3E%3Ccircle cx='624' cy='130' r='2.4' fill='%239FB2D8' opacity='.52'/%3E%3Ccircle cx='48' cy='96' r='2.2' fill='%239FB2D8' opacity='.50'/%3E%3Ccircle cx='138' cy='310' r='1.6' fill='%23C4CFE8' opacity='.38'/%3E%3Ccircle cx='206' cy='128' r='1.4' fill='%239FB2D8' opacity='.34'/%3E%3Ccircle cx='250' cy='404' r='2.0' fill='%23C4CFE8' opacity='.48'/%3E%3Ccircle cx='318' cy='216' r='1.2' fill='%238A7BA8' opacity='.30'/%3E%3Ccircle cx='288' cy='658' r='2.4' fill='%239FB2D8' opacity='.50'/%3E%3Ccircle cx='362' cy='500' r='1.5' fill='%23C4CFE8' opacity='.36'/%3E%3Ccircle cx='458' cy='348' r='1.8' fill='%239FB2D8' opacity='.42'/%3E%3Ccircle cx='432' cy='616' r='1.3' fill='%23C4CFE8' opacity='.30'/%3E%3Ccircle cx='508' cy='706' r='2.2' fill='%238A7BA8' opacity='.46'/%3E%3Ccircle cx='546' cy='148' r='1.5' fill='%239FB2D8' opacity='.34'/%3E%3Ccircle cx='652' cy='262' r='1.7' fill='%238A7BA8' opacity='.38'/%3E%3Ccircle cx='620' cy='560' r='1.4' fill='%239FB2D8' opacity='.32'/%3E%3Ccircle cx='700' cy='96' r='2.3' fill='%23C4CFE8' opacity='.48'/%3E%3Ccircle cx='742' cy='420' r='1.6' fill='%238A7BA8' opacity='.36'/%3E%3Ccircle cx='796' cy='232' r='1.3' fill='%23C4CFE8' opacity='.28'/%3E%3Ccircle cx='830' cy='540' r='2.0' fill='%238A7BA8' opacity='.44'/%3E%3Ccircle cx='778' cy='764' r='1.7' fill='%239FB2D8' opacity='.40'/%3E%3Ccircle cx='150' cy='700' r='1.9' fill='%23C4CFE8' opacity='.42'/%3E%3Ccircle cx='60' cy='262' r='1.4' fill='%238A7BA8' opacity='.30'/%3E%3Ccircle cx='238' cy='608' r='1.5' fill='%239FB2D8' opacity='.34'/%3E%3Ccircle cx='520' cy='528' r='1.6' fill='%238A7BA8' opacity='.36'/%3E%3Ccircle cx='668' cy='470' r='1.4' fill='%239FB2D8' opacity='.30'/%3E%3Ccircle cx='300' cy='76' r='1.7' fill='%23C4CFE8' opacity='.40'/%3E%3Ccircle cx='560' cy='300' r='1.2' fill='%238A7BA8' opacity='.26'/%3E%3Ccircle cx='120' cy='430' r='2.1' fill='%239FB2D8' opacity='.44'/%3E%3Ccircle cx='852' cy='66' r='1.5' fill='%23C4CFE8' opacity='.32'/%3E%3Ccircle cx='866' cy='350' r='1.8' fill='%238A7BA8' opacity='.40'/%3E%3Ccircle cx='360' cy='720' r='1.3' fill='%239FB2D8' opacity='.30'/%3E%3Ccircle cx='180' cy='220' r='1.1' fill='%238A7BA8' opacity='.26'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 880px 880px;
+  opacity: var(--stars-opacity);
+  animation: stars-breathe 13s ease-in-out infinite alternate;
+}
+.stars-twinkle {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='520' height='520'%3E%3Cg fill='%23E9F0FB'%3E%3Ccircle cx='64' cy='88' r='1.2'/%3E%3Ccircle cx='150' cy='300' r='1.5'/%3E%3Ccircle cx='232' cy='132' r='1'/%3E%3Ccircle cx='310' cy='420' r='1.3'/%3E%3Ccircle cx='402' cy='214' r='1.6'/%3E%3Ccircle cx='468' cy='368' r='1.1'/%3E%3Ccircle cx='88' cy='462' r='1.4'/%3E%3Ccircle cx='250' cy='508' r='1'/%3E%3Ccircle cx='352' cy='72' r='1.2'/%3E%3Ccircle cx='500' cy='120' r='1.4'/%3E%3Ccircle cx='190' cy='196' r='0.9'/%3E%3Ccircle cx='430' cy='486' r='1.3'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 520px 520px;
+  opacity: calc(0.18 * var(--stars-twinkle));
+  animation: stars-twinkle 7.5s ease-in-out infinite alternate;
+}
+@keyframes stars-breathe {
+  from { opacity: calc(var(--stars-opacity) * 0.78); }
+  to { opacity: var(--stars-opacity); }
+}
+@keyframes stars-twinkle {
+  from { opacity: calc(0.14 * var(--stars-twinkle)); }
+  to { opacity: calc(0.55 * var(--stars-twinkle)); }
+}
+
+/* Corner darkening — grounds the floating chrome at night */
+.vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    130% 100% at 50% 6%,
+    transparent 42%,
+    oklch(0.1 0.02 280 / var(--vignette)) 100%
+  );
+}
+
 /* Fine film grain — kills the "flat AI gradient" look */
 .noise {
   position: fixed;
@@ -289,8 +357,16 @@
 @media (prefers-reduced-motion: reduce) {
   .aurora::before,
   .aurora::after,
-  .aurora > span {
+  .aurora > span,
+  .stars,
+  .stars-twinkle {
     animation: none;
+  }
+  .stars {
+    opacity: var(--stars-opacity);
+  }
+  .stars-twinkle {
+    opacity: calc(0.3 * var(--stars-twinkle));
   }
   button:active:not(:disabled),
   [role='button']:active:not(:disabled),
@@ -332,20 +408,103 @@ html:not(.dark) .theme-moon {
 
 /* ── Depth & light ──────────────────────────────────────────── */
 
-/* Translucent chrome (sidebar) floating over the aurora */
+/* Liquid-glass chrome (sidebar) — frosted steel over the sky,
+   with a specular top rim and a soft ambient shadow. */
 .glass {
-  background: color-mix(in oklab, var(--sidebar) 62%, transparent);
-  backdrop-filter: blur(18px) saturate(1.5);
-  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  background: color-mix(in oklab, var(--sidebar) 55%, transparent);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.08),
+    0 24px 60px -28px oklch(0.1 0.02 280 / 0.55);
 }
-.dark .glass {
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
-}
-/* Translucent bars (mobile header / bottom tabs) */
+/* Liquid-glass bars (mobile header / floating tab pill) */
 .glass-bar {
-  background: color-mix(in oklab, var(--background) 68%, transparent);
-  backdrop-filter: blur(18px) saturate(1.5);
-  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  background: color-mix(in oklab, var(--background) 72%, transparent);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.06);
+}
+.dark .glass-bar {
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.07),
+    0 18px 44px -20px oklch(0.1 0.02 280 / 0.6);
+}
+
+/* Glass content surfaces — every bg-card panel frosts what drifts
+   behind it (the --card token carries the translucency). */
+.dark .bg-card {
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.06);
+}
+
+/* Floating glass layers — dialogs, sheets, menus, toasts. The
+   popover token is translucent; the frost comes from the @supports
+   rules below. */
+[data-slot='dialog-content'],
+[data-slot='alert-dialog-content'],
+[data-slot='sheet-content'] {
+  background: color-mix(in oklab, var(--popover) 92%, transparent);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.07),
+    0 32px 80px -32px oklch(0.1 0.02 280 / 0.6);
+}
+[data-slot='toast'] {
+  background: color-mix(in oklab, var(--popover) 92%, transparent);
+}
+
+/* The frost itself. Bare `backdrop-filter` declarations get
+   rewritten by the CSS compiler to the -webkit- prefixed form only
+   — which current Chrome then ignores — silently deleting the blur.
+   Declarations inside @supports blocks pass through untouched, so
+   the standard and prefixed engines are served separately. */
+@supports (backdrop-filter: blur(1px)) {
+  .glass,
+  .glass-bar,
+  [data-slot='dialog-content'],
+  [data-slot='alert-dialog-content'],
+  [data-slot='sheet-content'],
+  [data-slot='dropdown-menu-content'],
+  [data-slot='select-content'],
+  [data-slot='tooltip-content'],
+  [data-slot='toast'] {
+    backdrop-filter: var(--frost-strong);
+  }
+  .bg-card {
+    backdrop-filter: var(--frost);
+  }
+}
+@supports (-webkit-backdrop-filter: blur(1px)) and (not (backdrop-filter: blur(1px))) {
+  .glass,
+  .glass-bar,
+  [data-slot='dialog-content'],
+  [data-slot='alert-dialog-content'],
+  [data-slot='sheet-content'],
+  [data-slot='dropdown-menu-content'],
+  [data-slot='select-content'],
+  [data-slot='tooltip-content'],
+  [data-slot='toast'] {
+    -webkit-backdrop-filter: var(--frost-strong-w);
+  }
+  .bg-card {
+    -webkit-backdrop-filter: var(--frost-w);
+  }
+}
+
+/* Primary buttons — a lit glass chip: tinted body, specular top
+   edge, blue ambient glow. Scoped to real buttons so progress
+   fills and dots keep their flat color. */
+[data-slot='button'].bg-primary {
+  background-image: linear-gradient(
+    180deg,
+    oklch(1 0 0 / 0.14),
+    oklch(1 0 0 / 0) 46%,
+    oklch(0 0 0 / 0.06)
+  );
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.22),
+    0 8px 24px -10px var(--glow);
+}
+.dark [data-slot='button'].bg-primary {
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.35),
+    inset 0 0 0 1px oklch(1 0 0 / 0.08),
+    0 8px 28px -10px var(--glow);
 }
 
 /* Soft primary glow for the main action */
@@ -392,9 +551,17 @@ html:not(.dark) .theme-moon {
   }
 }
 
-/* Emerald→teal gradient text — brand moments only */
+/* Steel-blue→sky gradient text — brand moments only. Light mode
+   gets the deep end of the ramp so the wordmark holds its ground
+   on bright paper. */
 .text-shine {
-  background: linear-gradient(118deg, var(--primary) 20%, oklch(0.78 0.11 195));
+  background: linear-gradient(118deg, oklch(0.5 0.115 246), oklch(0.48 0.1 215));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.dark .text-shine {
+  background: linear-gradient(118deg, oklch(0.82 0.09 242), oklch(0.88 0.07 205));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -457,6 +624,21 @@ html:not(.dark) .theme-moon {
   body {
     background: #fff !important;
     color: #000 !important;
+  }
+  /* Glass flattens to solid paper in printouts */
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .bg-card,
+    [data-slot='dialog-content'],
+    [data-slot='alert-dialog-content'],
+    [data-slot='sheet-content'],
+    [data-slot='dropdown-menu-content'],
+    [data-slot='select-content'],
+    [data-slot='toast'] {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      background: #fff;
+      box-shadow: none;
+    }
   }
   html.tourny-printing body > *:not(#tourny-print-root) {
     display: none !important;

@@ -12,6 +12,12 @@ import type { EventDTO, TournamentDetailDTO } from '@/lib/types'
 // and must be visible to fontconfig (the Docker image installs
 // them; for local development see README → "Share cards").
 //
+// The design mirrors the app's "liquid glass" theme: a deep
+// blue-charcoal night sky with a constellation of glowing dots,
+// glass panels with hairline light borders and specular top rims
+// (the starfield ghosts through at 90% panel opacity), one
+// steel-blue accent, and gold reserved for the champion.
+//
 // Every text element is fitted with measured widths (card-fonts)
 // so long center or game names shrink before they ever overflow.
 // ─────────────────────────────────────────────────────────────
@@ -20,19 +26,16 @@ const W = 1080 // canvas width — displays full-width in WhatsApp
 const M = 64 // side margin
 const CW = W - 2 * M // content width
 
-// Brand — the app's own palette (see globals.css, oklch converted):
-// deep emerald on sage-tinted paper, gold as the champion accent.
-const INK = '#101512'
-const MUTED = '#525A55'
-const FAINT = '#6B7570'
-const PAPER = '#F7FAF7'
-const CARD = '#FFFFFF'
-const STROKE = '#E4EAE6'
-const EMERALD = '#007F51'
-const EMERALD_DEEP = '#0E422E'
-const EMERALD_SOFT = '#DDF0E6'
-const GOLD = '#EFBD24'
-const GOLD_DEEP = '#D9A514'
+// Brand — the app's "liquid glass night" palette (see globals.css):
+// deep blue-charcoal sky, steel-blue accent, gold for the champion.
+const INK = '#F2F4F9'
+const MUTED = '#B3BCCB'
+const FAINT = '#8E97AB'
+const SINHALA_INK = '#C3CBDA'
+const ACCENT = '#6FAEE8'
+const ACCENT_URL = '#D9E8F8'
+const PANEL_EDGE = '#5A6A8C'
+const COIN_EDGE = '#7C8BAD'
 
 const LATIN = 'Poppins, Noto Sans Sinhala, sans-serif'
 const SINHALA = 'Noto Sans Sinhala, Poppins, sans-serif'
@@ -111,23 +114,119 @@ function text(t: string, o: TextOpts): string {
   return `<text ${attrs}>${esc(t)}</text>`
 }
 
+// ── starfield ────────────────────────────────────────────────
+
+/** Deterministic PRNG — the same card always renders the same sky. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0
+  return () => {
+    a |= 0
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+const STAR_COLORS = ['#9FB2D8', '#C4CFE8', '#8A7BA8']
+
+/** A constellation of glowing dots with hairline connections —
+ *  the card's night sky, laid under everything (it shows through
+ *  the glass panels). `quietBands` clears the sky around small
+ *  text blocks that sit directly on it, so nothing competes with
+ *  a caption baseline. */
+function starfield(w: number, h: number, quietBands: Array<[number, number]> = []): string {
+  const inQuietBand = (y: number): boolean =>
+    quietBands.some(([a, b]) => y > a - 26 && y < b + 26)
+  // Dots only clear out of the content column (they never sit under
+  // text there); the margins keep their sky at every height.
+  const quietDot = (x: number, y: number): boolean =>
+    x > M - 30 && x < w - M + 30 && inQuietBand(y)
+  const rand = mulberry32(0x5eed42)
+  const parts: string[] = []
+  const dots: { x: number; y: number }[] = []
+  const count = Math.max(46, Math.round((w * h) / 15000))
+  for (let i = 0; i < count; i++) {
+    const x = Math.round(rand() * w * 10) / 10
+    const y = Math.round(rand() * h * 10) / 10
+    if (quietDot(x, y)) continue
+    const r = Math.round((0.9 + rand() * 2.1) * 100) / 100
+    const color = STAR_COLORS[Math.floor(rand() * STAR_COLORS.length)] ?? STAR_COLORS[0]
+    const opacity = Math.round((0.12 + rand() * 0.26) * 1000) / 1000
+    dots.push({ x, y })
+    // a soft halo on the brighter stars
+    if (rand() < 0.2) {
+      parts.push(`<circle cx="${x}" cy="${y}" r="${Math.round(r * 3.6 * 10) / 10}" fill="${color}" opacity="${Math.round(opacity * 200) / 1000}"/>`)
+    }
+    parts.push(`<circle cx="${x}" cy="${y}" r="${r}" fill="${color}" opacity="${opacity}"/>`)
+  }
+  // a few hairline connections between neighbouring stars —
+  // never across a quiet band (lines are long, full-width quiet)
+  let links = 0
+  for (let i = 0; i < dots.length && links < 11; i++) {
+    const a = dots[i]
+    for (let j = i + 1; j < dots.length; j++) {
+      const b = dots[j]
+      const d2 = (a.x - b.x) ** 2 + (a.y - b.y) ** 2
+      if (d2 > 70 * 70 && d2 < 170 * 170 && rand() < 0.09) {
+        if (!inQuietBand(a.y) && !inQuietBand(b.y) && !inQuietBand((a.y + b.y) / 2)) {
+          parts.push(`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#7A8DBD" stroke-opacity="0.09" stroke-width="1"/>`)
+          links++
+        }
+        break
+      }
+    }
+  }
+  return parts.join('\n')
+}
+
 // ── building blocks ──────────────────────────────────────────
 
-/** A rounded outline chip ("Category B", "Ages 9 to 10"). */
+/** Shared gradient + filter definitions (emitted once per card). */
+function defs(): string {
+  return [
+    `<defs>`,
+    `<linearGradient id="gBg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1A1C25"/><stop offset="1" stop-color="#12131A"/></linearGradient>`,
+    `<linearGradient id="gPanel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3B465E"/><stop offset="1" stop-color="#2A3242"/></linearGradient>`,
+    `<linearGradient id="gEdge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8FA3C8" stop-opacity="0.9"/><stop offset="1" stop-color="#8FA3C8" stop-opacity="0.28"/></linearGradient>`,
+    `<linearGradient id="gWatch" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22588B"/><stop offset="1" stop-color="#17466E"/></linearGradient>`,
+    `<linearGradient id="gFill" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4A8FD0"/><stop offset="1" stop-color="#2E639C"/></linearGradient>`,
+    `<linearGradient id="gGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#EFC63E"/><stop offset="1" stop-color="#C99410"/></linearGradient>`,
+    `<linearGradient id="gSilver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E3E9E6"/><stop offset="1" stop-color="#96A19B"/></linearGradient>`,
+    `<linearGradient id="gBronze" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#DCA36C"/><stop offset="1" stop-color="#A9662F"/></linearGradient>`,
+    `<filter id="fSoft" x="-20%" y="-20%" width="140%" height="160%"><feGaussianBlur stdDeviation="11"/></filter>`,
+    `</defs>`,
+  ].join('')
+}
+
+/** A glass panel — soft ambient shadow, translucent body (the
+ *  starfield shows through), a light border that is brighter along
+ *  the top edge, and a specular top rim. The signature surface of
+ *  the theme. */
+function panel(x: number, y: number, w: number, h: number, rx = 30): string {
+  return [
+    `<rect x="${x + 8}" y="${y + 14}" width="${w - 16}" height="${h}" rx="${rx}" fill="#06070B" opacity="0.55" filter="url(#fSoft)"/>`,
+    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="url(#gPanel)" fill-opacity="0.82"/>`,
+    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="none" stroke="url(#gEdge)" stroke-width="2"/>`,
+    `<rect x="${x + 16}" y="${y + 2}" width="${Math.max(0, w - 32)}" height="3" rx="1.5" fill="#FFFFFF" opacity="0.16"/>`,
+  ].join('\n')
+}
+
+/** A rounded glass chip ("Category B", "Ages 9 to 10"). */
 function chip(
   t: string,
   x: number,
   top: number,
   opts?: { filled?: boolean; height?: number }
 ): { svg: string; right: number } | null {
-  const size = opts?.height && opts.height < 50 ? 25 : 28
+  const size = opts?.height && opts?.height < 50 ? 25 : 28
   const h = opts?.height ?? 58
-  const padX = opts?.height && opts.height < 50 ? 20 : 26
+  const padX = opts?.height && opts?.height < 50 ? 20 : 26
   const w = Math.round(width(t, 'medium', size) + padX * 2)
   if (x + w > W - M) return null // never overflow — drop the chip instead
   const svg = [
-    `<rect x="${x}" y="${top}" width="${w}" height="${h}" rx="${h / 2}" fill="${opts?.filled ? EMERALD_SOFT : 'none'}" stroke="${opts?.filled ? 'none' : STROKE}" stroke-width="2"/>`,
-    text(t, { x: x + w / 2, y: baseline(top, h, size), size, weight: 'medium', fill: opts?.filled ? EMERALD_DEEP : MUTED, anchor: 'middle' }),
+    `<rect x="${x}" y="${top}" width="${w}" height="${h}" rx="${h / 2}" fill="none" stroke="${PANEL_EDGE}" stroke-opacity="0.75" stroke-width="2"/>`,
+    text(t, { x: x + w / 2, y: baseline(top, h, size), size, weight: 'medium', fill: MUTED, anchor: 'middle' }),
   ].join('')
   return { svg, right: x + w }
 }
@@ -142,38 +241,26 @@ function medalBadge(cx: number, cy: number, r: number, rank: 1 | 2 | 3): string 
   const size = Math.round(r * 0.95)
   return [
     `<circle cx="${cx}" cy="${cy}" r="${r}" fill="url(#${skins.grad})" stroke="${skins.ring}" stroke-width="3"/>`,
+    `<circle cx="${cx - r * 0.34}" cy="${cy - r * 0.4}" r="${r * 0.16}" fill="#FFFFFF" opacity="0.4"/>`,
     text(String(rank), { x: cx, y: cy + r * 0.36, size, weight: 'semibold', fill: skins.numeral, anchor: 'middle' }),
   ].join('')
 }
 
-/** Emerald masthead with the eyebrow label, title and organizer. */
+/** Title block on the night sky — eyebrow, tournament name and
+ *  organizer, closed by a hairline. No colored band: the whole
+ *  card is one continuous dark canvas, like the app. */
 function masthead(eyebrow: string, title: string, organizer: string): { svg: string; bottom: number } {
-  const H = 316
   const parts: string[] = [
-    `<defs>`,
-    `<linearGradient id="gHead" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#00875A"/><stop offset="1" stop-color="${EMERALD_DEEP}"/></linearGradient>`,
-    `<linearGradient id="gGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#EFC63E"/><stop offset="1" stop-color="#C99410"/></linearGradient>`,
-    `<linearGradient id="gSilver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E3E9E6"/><stop offset="1" stop-color="#96A19B"/></linearGradient>`,
-    `<linearGradient id="gBronze" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#DCA36C"/><stop offset="1" stop-color="#A9662F"/></linearGradient>`,
-    `<linearGradient id="gFill" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#00A263"/><stop offset="1" stop-color="${EMERALD}"/></linearGradient>`,
-    `<clipPath id="clipHead"><rect width="${W}" height="${H}" rx="0"/></clipPath>`,
-    `</defs>`,
-    `<rect width="${W}" height="${H}" fill="url(#gHead)"/>`,
-    `<g clip-path="url(#clipHead)">`,
-    `<circle cx="1008" cy="36" r="180" fill="#FFFFFF" opacity="0.05"/>`,
-    `<circle cx="70" cy="330" r="130" fill="#FFFFFF" opacity="0.04"/>`,
-    `<circle cx="948" cy="304" r="64" fill="#FFFFFF" opacity="0.06"/>`,
-    `</g>`,
-    text(eyebrow, { x: M, y: 124, size: 30, weight: 'semibold', fill: GOLD, letterSpacing: 7 }),
+    text(eyebrow, { x: M, y: 124, size: 30, weight: 'semibold', fill: ACCENT, letterSpacing: 7 }),
   ]
   const fitted = fit(title, 'semibold', 60, CW, 44)
-  parts.push(text(fitted.text, { x: M, y: 124 + 64 + (60 - fitted.size) / 2, size: fitted.size, weight: 'semibold', fill: '#FFFFFF' }))
+  parts.push(text(fitted.text, { x: M, y: 188 + (60 - fitted.size) / 2, size: fitted.size, weight: 'semibold', fill: INK }))
   if (organizer.trim()) {
     const f = fit(organizer.trim(), 'regular', 30, CW, 24)
-    parts.push(text(f.text, { x: M, y: 250 + (30 - f.size) / 2, size: f.size, weight: 'regular', fill: '#CDE8DA' }))
+    parts.push(text(f.text, { x: M, y: 250 + (30 - f.size) / 2, size: f.size, weight: 'regular', fill: MUTED }))
   }
-  parts.push(`<rect y="${H}" width="${W}" height="6" fill="url(#gGold)"/>`)
-  return { svg: parts.join('\n'), bottom: H + 6 }
+  parts.push(`<rect x="${M}" y="292" width="${CW}" height="2" rx="1" fill="#FFFFFF" opacity="0.08"/>`)
+  return { svg: parts.join('\n'), bottom: 294 }
 }
 
 /** Progress bar, brand wordmark and date — shared footer. */
@@ -183,18 +270,21 @@ function footer(detail: TournamentDetailDTO, y: number): { svg: string; bottom: 
   const ratio = progress.total > 0 ? Math.min(1, progress.completed / progress.total) : 0
   const filled = Math.max(progress.completed > 0 ? 10 : 0, Math.round(CW * ratio))
   const parts: string[] = [
-    `<line x1="${M}" y1="${y}" x2="${W - M}" y2="${y}" stroke="${STROKE}" stroke-width="2"/>`,
+    `<rect x="${M}" y="${y}" width="${CW}" height="2" rx="1" fill="#FFFFFF" opacity="0.08"/>`,
     text(`${progress.completed} of ${progress.total} events completed`, { x: M, y: y + 58, size: 28, weight: 'regular', fill: MUTED }),
-    `<rect x="${M}" y="${y + 84}" width="${CW}" height="10" rx="5" fill="${STROKE}"/>`,
-    filled > 0 ? `<rect x="${M}" y="${y + 84}" width="${filled}" height="10" rx="5" fill="url(#gFill)"/>` : '',
-    `<rect x="${M}" y="${y + 142}" width="14" height="14" rx="4" fill="${EMERALD}"/>`,
+    `<rect x="${M}" y="${y + 84}" width="${CW}" height="10" rx="5" fill="#FFFFFF" opacity="0.1"/>`,
+    filled > 0
+      ? `<rect x="${M}" y="${y + 84}" width="${filled}" height="10" rx="5" fill="url(#gFill)"/>` +
+        `<rect x="${M + 2}" y="${y + 85.5}" width="${Math.max(0, filled - 4)}" height="2" rx="1" fill="#FFFFFF" opacity="0.3"/>`
+      : '',
+    `<rect x="${M}" y="${y + 142}" width="14" height="14" rx="4" fill="url(#gFill)"/>`,
     text('TOURNY LITE', { x: M + 26, y: y + 155, size: 24, weight: 'semibold', fill: FAINT, letterSpacing: 4.5 }),
     text(date, { x: W - M, y: y + 155, size: 26, weight: 'regular', fill: MUTED, anchor: 'end' }),
   ]
   return { svg: parts.join('\n'), bottom: y + 200 }
 }
 
-/** The guest link bar — a button-styled pill inviting the group to
+/** The guest link bar — a lit glass pill inviting the group to
  *  open the live scoreboard. The full URL rides along in the image
  *  caption (where WhatsApp makes it tappable); the bar shows it
  *  without the protocol so it stays as large as possible. */
@@ -212,22 +302,25 @@ function watchLiveBar(y: number, url: string): { svg: string; bottom: number } {
   const urlX = labelX + labelW + gap
   const urlMax = W - M - padX - urlX
   const display = url.replace(/^https?:\/\//, '')
-  const fitted = fit(display, 'medium', 27, urlMax, 20)
+  const fitted = fit(display, 'medium', 29, urlMax, 22)
   return {
     svg: [
-      `<rect x="${M}" y="${y}" width="${CW}" height="${H}" rx="${H / 2}" fill="${EMERALD}"/>`,
-      `<circle cx="${playCx}" cy="${y + H / 2}" r="${playR}" fill="#FFFFFF" opacity="0.24"/>`,
+      `<rect x="${M + 6}" y="${y + 12}" width="${CW - 12}" height="${H}" rx="${H / 2}" fill="#06070B" opacity="0.5" filter="url(#fSoft)"/>`,
+      `<rect x="${M}" y="${y}" width="${CW}" height="${H}" rx="${H / 2}" fill="url(#gWatch)" fill-opacity="0.96"/>`,
+      `<rect x="${M}" y="${y}" width="${CW}" height="${H}" rx="${H / 2}" fill="none" stroke="#4E8FCB" stroke-opacity="0.55" stroke-width="2"/>`,
+      `<rect x="${M + 18}" y="${y + 3}" width="${CW - 36}" height="3" rx="1.5" fill="#FFFFFF" opacity="0.12"/>`,
+      `<circle cx="${playCx}" cy="${y + H / 2}" r="${playR}" fill="#FFFFFF" opacity="0.26"/>`,
       `<path d="M ${playCx - 5} ${y + H / 2 - 7} L ${playCx + 8} ${y + H / 2} L ${playCx - 5} ${y + H / 2 + 7} Z" fill="#FFFFFF"/>`,
       text(label, { x: labelX, y: baseline(y, H, 26), size: 26, weight: 'semibold', fill: '#FFFFFF', letterSpacing: 3 }),
-      `<rect x="${Math.round(labelX + labelW + gap / 2)}" y="${y + H / 2 - 14}" width="2" height="28" rx="1" fill="#FFFFFF" opacity="0.5"/>`,
-      text(fitted.text, { x: urlX, y: baseline(y, H, fitted.size), size: fitted.size, weight: 'medium', fill: '#D9F4E6' }),
+      `<rect x="${Math.round(labelX + labelW + gap / 2)}" y="${y + H / 2 - 14}" width="2" height="28" rx="1" fill="#FFFFFF" opacity="0.45"/>`,
+      text(fitted.text, { x: urlX, y: baseline(y, H, fitted.size), size: fitted.size, weight: 'medium', fill: ACCENT_URL }),
     ].join('\n'),
     bottom: y + H,
   }
 }
 
-function svgDocument(height: number, body: string): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}">\n<rect width="${W}" height="${height}" fill="${PAPER}"/>\n${body}\n</svg>`
+function svgDocument(height: number, body: string, quietBands: Array<[number, number]> = []): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}">\n${defs()}\n<rect width="${W}" height="${height}" fill="url(#gBg)"/>\n${starfield(W, height, quietBands)}\n${body}\n</svg>`
 }
 
 /** A podium row — medal coin, center identity, points.
@@ -245,13 +338,13 @@ function podiumRow(
   const pointsEnd = W - M - 30
   const nameMax = pointsEnd - 200 - nameX
   const parts: string[] = [
-    `<rect x="${M}" y="${top}" width="${CW}" height="${H}" rx="20" fill="${CARD}" stroke="${STROKE}" stroke-width="2"/>`,
+    panel(M, top, CW, H, 28),
     medalBadge(badgeX, top + H / 2, 42, rank),
   ]
   if (place.name) {
     const f = fit(place.name, 'medium', 36, nameMax, 28)
-    parts.push(text(f.text, { x: nameX, y: top + 58, size: f.size, weight: 'medium', fill: INK }))
-    const c = chip(place.code, nameX, top + 80, { filled: true })
+    parts.push(text(f.text, { x: nameX, y: top + 54, size: f.size, weight: 'medium', fill: INK }))
+    const c = chip(place.code, nameX, top + 72, { height: 48 })
     if (c) parts.push(c.svg)
   } else if (place.location) {
     parts.push(text(place.code, { x: nameX, y: top + 62, size: 40, weight: 'semibold', fill: INK }))
@@ -297,16 +390,18 @@ export function buildEventCard(
   const eyebrow = isCorrection ? 'CORRECTED RESULT' : 'EVENT RESULT'
 
   const parts: string[] = []
+  const quiet: Array<[number, number]> = [[218, 268]] // organizer line
   const head = masthead(eyebrow, tournament.name, tournament.organizer)
   parts.push(head.svg)
-  let y = head.bottom + 84
+  let y = head.bottom + 76
 
   const game = fit(event.gameName, 'semibold', 62, CW, 40)
   parts.push(text(game.text, { x: M, y, size: game.size, weight: 'semibold', fill: INK }))
   if (event.gameSinhalaName) {
     y += 58
     const si = fit(event.gameSinhalaName, 'regular', 40, CW, 32)
-    parts.push(text(si.text, { x: M, y, size: si.size, weight: 'regular', fill: '#47504A', sinhala: true }))
+    parts.push(text(si.text, { x: M, y, size: si.size, weight: 'regular', fill: SINHALA_INK, sinhala: true }))
+    quiet.push([y - 34, y + 10])
   }
 
   y += 42
@@ -325,7 +420,8 @@ export function buildEventCard(
     chipX = c.right + 14
   }
   parts.push(chips.join('\n'))
-  y = chipTop + 58 + 40
+  quiet.push([chipTop - 12, chipTop + 70])
+  y = chipTop + 58 + 36
 
   const medalPts = [tournament.pointsFirst, tournament.pointsSecond, tournament.pointsThird]
   for (const { code, rank } of places) {
@@ -344,7 +440,7 @@ export function buildEventCard(
   const scored = detail.standings.filter((r) => r.total > 0)
   if (scored.length > 0) {
     const top = scored.slice(0, 3)
-    parts.push(text('OVERALL STANDINGS — TOTAL POINTS', { x: M, y: y + 24, size: 23, weight: 'semibold', fill: MUTED, letterSpacing: 5 }))
+    parts.push(text('OVERALL STANDINGS — TOTAL POINTS', { x: M, y: y + 24, size: 23, weight: 'semibold', fill: FAINT, letterSpacing: 5 }))
     const line = fit(
       top
         .map((r, i) => `${i + 1}. ${r.centerName ? `${r.centerName} (${r.centerCode})` : r.centerCode} — ${r.total} pts`)
@@ -354,22 +450,25 @@ export function buildEventCard(
       CW,
       24
     )
-    parts.push(text(line.text, { x: M, y: y + 74, size: line.size, weight: 'medium', fill: INK }))
+    parts.push(text(line.text, { x: M, y: y + 74, size: line.size, weight: 'medium', fill: '#E3E8F2' }))
+    quiet.push([y - 10, y + 88])
     y += 110
   }
 
   if (opts?.presentUrl) {
-    const bar = watchLiveBar(y + 14, opts.presentUrl)
+    const bar = watchLiveBar(y + 22, opts.presentUrl)
     parts.push(bar.svg)
+    quiet.push([y + 4, bar.bottom])
     y = bar.bottom + 12
   }
 
   const foot = footer(detail, y + 30)
   parts.push(foot.svg)
+  quiet.push([y + 26, foot.bottom])
 
   const category = division ? `Cat ${division.code}` : `Cat ${event.divisionCode}`
   return {
-    svg: svgDocument(foot.bottom, parts.join('\n')),
+    svg: svgDocument(foot.bottom, parts.join('\n'), quiet),
     caption:
       `${isCorrection ? '🔁 Corrected result' : '🏁 Event result'} · ${tournament.name} · ${event.gameName} (${category})` +
       (opts?.presentUrl ? `\n${opts.presentUrl}` : ''),
@@ -389,9 +488,10 @@ export function buildStandingsCard(
   if (scored.length === 0) return null
 
   const parts: string[] = []
+  const quiet: Array<[number, number]> = [[218, 268]] // organizer line
   const head = masthead('STANDINGS', tournament.name, tournament.organizer)
   parts.push(head.svg)
-  let y = head.bottom + 62
+  let y = head.bottom + 46
 
   const shown = scored.slice(0, MAX_STANDINGS_ROWS)
   const hidden = scored.length - shown.length
@@ -400,15 +500,15 @@ export function buildStandingsCard(
 
   for (const row of shown) {
     const H = 112
-    parts.push(`<rect x="${M}" y="${y}" width="${CW}" height="${H}" rx="20" fill="${CARD}" stroke="${STROKE}" stroke-width="2"/>`)
+    parts.push(panel(M, y, CW, H, 28))
     if (row.rank <= 3) {
       parts.push(medalBadge(M + 26 + 36, y + H / 2, 36, row.rank as 1 | 2 | 3))
     } else {
       // Neutral coin — same geometry as the medals so every row's
       // identity column lines up, ranks beyond the podium stay quiet.
       parts.push(
-        `<circle cx="${M + 62}" cy="${y + H / 2}" r="36" fill="none" stroke="#D5DFD8" stroke-width="2"/>`,
-        text(String(row.rank), { x: M + 62, y: y + H / 2 + 14, size: 38, weight: 'semibold', fill: FAINT, anchor: 'middle' })
+        `<circle cx="${M + 62}" cy="${y + H / 2}" r="36" fill="none" stroke="${COIN_EDGE}" stroke-opacity="0.95" stroke-width="2"/>`,
+        text(String(row.rank), { x: M + 62, y: y + H / 2 + 14, size: 38, weight: 'semibold', fill: MUTED, anchor: 'middle' })
       )
     }
     const nameX = M + 112
@@ -440,21 +540,24 @@ export function buildStandingsCard(
 
   if (hidden > 0) {
     parts.push(text(`and ${hidden} more center${hidden === 1 ? '' : 's'} below`, { x: W / 2, y: y + 52, size: 28, weight: 'regular', fill: FAINT, anchor: 'middle' }))
+    quiet.push([y + 18, y + 58])
     y += 66
   }
 
   if (opts?.presentUrl) {
-    const bar = watchLiveBar(y + 14, opts.presentUrl)
+    const bar = watchLiveBar(y + 22, opts.presentUrl)
     parts.push(bar.svg)
+    quiet.push([y + 4, bar.bottom])
     y = bar.bottom + 12
   }
 
   const foot = footer(detail, y + 30)
   parts.push(foot.svg)
+  quiet.push([y + 26, foot.bottom])
 
   const { progress } = detail
   return {
-    svg: svgDocument(foot.bottom, parts.join('\n')),
+    svg: svgDocument(foot.bottom, parts.join('\n'), quiet),
     caption:
       `🏆 ${tournament.name} — standings after ${progress.completed} of ${progress.total} events` +
       (opts?.presentUrl ? `\n${opts.presentUrl}` : ''),
@@ -465,7 +568,7 @@ export function buildStandingsCard(
 
 /**
  * Renders a card SVG to JPEG (WhatsApp's recommended image format —
- * smaller than PNG for these flat designs and previews crisply).
+ * smaller than PNG and previews crisply).
  */
 export async function renderCardJpeg(svg: string): Promise<Buffer> {
   const { default: sharp } = await import('sharp')

@@ -91,5 +91,12 @@
     "tw-animate-css": "^1.3.5",
     "typescript": "^5"
   },
-  "description": "Tournament management and live scoring — multi-division competitions, projector scoreboard, field scoring console."
+  "description": "Tournament management and live scoring — multi-division competitions, projector scoreboard, field scoring console.",
+  "browserslist": [
+    "Chrome >= 111",
+    "Edge >= 111",
+    "Firefox >= 115",
+    "Safari >= 16.4",
+    "iOS >= 16.4"
+  ]
 }

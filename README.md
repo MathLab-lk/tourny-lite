@@ -18,6 +18,11 @@ Run an entire event from one lightweight application:
   as a full-screen, high-contrast dark stage with gold / silver / bronze
   rank accents and deterministic tie-breaking (total → first → second →
   third places). Esc or Exit returns to wherever you launched it.
+- **Liquid glass theme** — a deep blue-charcoal night sky (drifting
+  nebula, starfield, film grain) behind frosted translucent glass
+  panels; a floating glass sidebar on desktop, a detached glass tab
+  pill with a lit active segment on phones; one steel-blue accent
+  with a light "silver glass" day variant, dark by night.
 - **Coordination tools (M&E)** — a division × game matrix of every event,
   result corrections with mandatory justification, a complete revision
   history, center management and A4 print sheets (event progress).
@@ -113,12 +118,17 @@ Share results to a WhatsApp group through a self-hosted
    (medals, centers and points).
 
 Broadcasts go out as **styled share cards** — rendered images in the
-app's own design language (emerald masthead, medal coins, progress
-bar), typeset with real font shaping so the Sinhala game names render
-correctly, sent as JPEG with a short caption via WAHA's `sendImage`.
-If a card cannot be rendered or delivered (missing fonts, an engine
-without `sendImage`, a flaky server), the equivalent plain-text
-announcement is sent instead, so the group always hears the result.
+app's own "liquid glass" design language (deep blue-charcoal night sky
+with a starfield constellation, frosted glass panels with lit top
+edges, medal coins, progress bar), typeset with real font shaping so
+the Sinhala game names render correctly, sent as JPEG with a short
+caption via WAHA's `sendImage`. The card design is verified
+pixel-by-pixel: `scripts/render-sample-cards.ts` renders every variant
+and `scripts/check-card-layout.py` asserts the geometry, palette and
+ink placement (129 checks). If a card cannot be rendered or delivered
+(missing fonts, an engine without `sendImage`, a flaky server), the
+equivalent plain-text announcement is sent instead, so the group
+always hears the result.
 
 **Every broadcast carries the guest link:** the cards draw a
 *Watch live* bar and the image caption (and the text fallback) carries

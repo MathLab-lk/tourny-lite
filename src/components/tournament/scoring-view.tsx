@@ -274,13 +274,13 @@ export function ScoringView() {
                 className={cn(
                   'shrink-0 rounded-md border px-3 py-1.5 text-[13px] transition-colors',
                   active
-                    ? 'border-foreground bg-foreground text-background'
+                    ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-border bg-card text-foreground hover:bg-muted/60'
                 )}
               >
                 {g.englishName}
                 {g.sinhalaName ? (
-                  <span className={cn('ml-1.5 text-xs', active ? 'opacity-70' : 'text-muted-foreground sinhala')}>
+                  <span className={cn('ml-1.5 text-xs', active ? 'opacity-75' : 'text-muted-foreground sinhala')}>
                     {g.sinhalaName}
                   </span>
                 ) : null}

@@ -71,8 +71,8 @@ export function FadeIn({
 const EVENT_STATUS_META: Record<EventStatus, { label: string; dot: string; chip: string }> = {
   pending: {
     label: 'Pending',
-    dot: 'bg-muted-foreground/40',
-    chip: 'bg-muted text-muted-foreground',
+    dot: 'bg-muted-foreground/60',
+    chip: 'bg-muted text-muted-foreground dark:bg-white/[0.08] dark:text-zinc-300',
   },
   in_progress: {
     label: 'In progress',
@@ -129,13 +129,13 @@ const TOURNAMENT_STATUS_META: Record<TournamentStatus, { label: string; chip: st
   },
   draft: {
     label: 'Draft',
-    chip: 'bg-muted text-muted-foreground',
-    dot: 'bg-muted-foreground/40',
+    chip: 'bg-muted text-muted-foreground dark:bg-white/[0.08] dark:text-zinc-300',
+    dot: 'bg-muted-foreground/60',
   },
   archived: {
     label: 'Archived',
-    chip: 'bg-muted text-muted-foreground',
-    dot: 'bg-muted-foreground/40',
+    chip: 'bg-muted text-muted-foreground dark:bg-white/[0.08] dark:text-zinc-300',
+    dot: 'bg-muted-foreground/60',
   },
 }
 
@@ -258,7 +258,7 @@ export function EmptyState({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={springSoft}
       className={cn(
-        'flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-6 py-16 text-center',
+        'flex flex-col items-center justify-center gap-1.5 rounded-xl border bg-card px-6 py-16 text-center shadow-xs',
         className
       )}
     >

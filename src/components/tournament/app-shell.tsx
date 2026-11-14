@@ -46,9 +46,10 @@ import type { TournamentStatus, TournamentSummaryDTO } from '@/lib/types'
  *  - Destinations are places, never actions. The scoreboard (a
  *    projector mode) is presented modally and therefore lives
  *    outside this nav entirely.
- *  - Desktop keeps a glass sidebar; phones get a tab bar with the
- *    same destinations, re-grouped by frequency (Apple's own
- *    sidebar ↔ tab bar split).
+ *  - Desktop keeps a floating glass side panel; phones get a
+ *    detached glass tab pill with a lit active segment — the same
+ *    destinations, re-grouped by frequency (Apple's own sidebar ↔
+ *    tab bar split).
  *  - "Back" on mobile is a real, labeled back button — no hidden
  *    logo shortcuts.
  *
@@ -121,17 +122,20 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen">
-      {/* Ambient background — slow aurora + film grain */}
+      {/* Ambient background — drifting nebula, starfield, film grain */}
       <div className="aurora print:hidden" aria-hidden>
         <span />
       </div>
+      <div className="stars print:hidden" aria-hidden />
+      <div className="stars-twinkle print:hidden" aria-hidden />
+      <div className="vignette print:hidden" aria-hidden />
       <div className="noise print:hidden" aria-hidden />
 
-      {/* ── Desktop sidebar ─────────────────────────────────────── */}
-      <aside className="glass fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r lg:flex print:hidden">
+      {/* ── Desktop side panel ─────────────────────────────────── */}
+      <aside className="glass fixed inset-y-3 left-3 z-40 hidden w-60 flex-col rounded-2xl border shadow-2xl shadow-black/20 lg:flex print:hidden">
         {/* Brand */}
         <div className="flex h-14 shrink-0 items-center gap-2.5 px-4">
-          <img src="/logo.svg" alt="" className="h-6 w-6 rounded-md" width={24} height={24} />
+          <img src="/logo.svg" alt="" className="h-6 w-6 rounded-lg" width={24} height={24} />
           <span className="text-shine text-[15px] font-semibold tracking-tight">Tourny&nbsp;Lite</span>
         </div>
 
@@ -315,8 +319,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
 
       {/* ── Content ─────────────────────────────────────────────── */}
-      <div className="relative z-10 lg:pl-60">
-        <main className="pb-24 lg:pb-10">
+      <div className="relative z-10 lg:pl-[16.5rem]">
+        <main className="pb-32 lg:pb-10">
           {/* Views crossfade: the outgoing page lifts away before the
               next one rises in — no hard cuts anywhere in the app. */}
           <AnimatePresence mode="wait">
@@ -333,9 +337,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
 
-      {/* ── Mobile tab bar ───────────────────────────────────────── */}
+      {/* ── Mobile tab pill ───────────────────────────────────── */}
       <nav
-        className="glass-bar fixed inset-x-0 bottom-0 z-40 flex border-t pb-[env(safe-area-inset-bottom)] lg:hidden print:hidden"
+        className="glass-bar fixed inset-x-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 flex rounded-full border shadow-2xl shadow-black/30 lg:hidden print:hidden"
         aria-label="Primary"
       >
         <TabLink icon={Home} label="Home" active={view === 'home'} onClick={() => go('home')} />
@@ -464,7 +468,7 @@ function SidebarLink({
         <motion.span
           layoutId="sidebar-nav-pill"
           transition={navSpring}
-          className="absolute inset-0 rounded-md bg-accent shadow-xs"
+          className="absolute inset-0 rounded-lg bg-accent shadow-xs ring-1 ring-inset ring-primary/35"
           aria-hidden
         />
       ) : null}
@@ -474,9 +478,9 @@ function SidebarLink({
   )
 }
 
-/** iOS-style tab: color emphasis + a gentle icon bounce on
- *  activation. Lays out, so tabs glide aside as siblings appear
- *  or leave the bar. */
+/** Glass tab segment — the active destination lights up inside a
+ *  pill that glides between segments (shared layout animation).
+ *  Lays out, so tabs glide aside as siblings appear or leave. */
 function TabLink({
   icon: Icon,
   label,
@@ -500,18 +504,26 @@ function TabLink({
       whileTap={{ scale: 0.9 }}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'relative flex min-h-14 flex-1 flex-col items-center justify-center gap-1 py-1 text-[10px] font-medium transition-colors',
-        active ? 'text-primary' : 'text-muted-foreground/70'
+        'relative flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-full px-2 py-1.5 text-[10px] font-medium transition-colors',
+        active ? 'text-primary-foreground' : 'text-muted-foreground'
       )}
     >
+      {active ? (
+        <motion.span
+          layoutId="mobile-tab-pill"
+          transition={navSpring}
+          className="absolute inset-x-1.5 inset-y-1 rounded-full bg-primary shadow-[0_6px_20px_-8px_var(--glow)] ring-1 ring-inset ring-white/20"
+          aria-hidden
+        />
+      ) : null}
       <motion.span
         animate={active ? { scale: [1, 1.18, 1] } : { scale: 1 }}
         transition={{ duration: 0.42, ease: [0.34, 1.56, 0.64, 1] }}
-        className="flex"
+        className="relative z-10 flex"
       >
         <Icon className="h-[22px] w-[22px]" aria-hidden />
       </motion.span>
-      {label}
+      <span className="relative z-10">{label}</span>
     </motion.button>
   )
 }
