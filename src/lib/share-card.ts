@@ -543,15 +543,15 @@ export function buildEventCard(
 
 // ── standings card ───────────────────────────────────────────
 
-const MAX_STANDINGS_ROWS = 10
-
 export function buildStandingsCard(
   detail: TournamentDetailDTO,
   opts?: { presentUrl?: string | null }
 ): ShareCard | null {
   const { tournament } = detail
-  const scored = detail.standings.filter((r) => r.total > 0)
-  if (scored.length === 0) return null
+  // The whole table, not just the centers that have scored — a
+  // standings broadcast shows everyone where they stand, 0 included.
+  const rows = detail.standings
+  if (rows.length === 0) return null
 
   const parts: string[] = []
   const quiet: Array<[number, number]> = [[218, 268]] // organizer line
@@ -559,12 +559,10 @@ export function buildStandingsCard(
   parts.push(head.svg)
   let y = head.bottom + 46
 
-  const shown = scored.slice(0, MAX_STANDINGS_ROWS)
-  const hidden = scored.length - shown.length
   const pointsEnd = W - M - 30
   const locationByCode = new Map(detail.centers.map((c) => [c.centerCode, c.location]))
 
-  for (const row of shown) {
+  for (const row of rows) {
     const H = 112
     parts.push(panel(M, y, CW, H, 28))
     // The leader carries a small gold tab on the left edge — who is
@@ -608,12 +606,6 @@ export function buildStandingsCard(
     y += H + 14
   }
   y -= 14
-
-  if (hidden > 0) {
-    parts.push(text(`and ${hidden} more center${hidden === 1 ? '' : 's'} below`, { x: W / 2, y: y + 52, size: 28, weight: 'regular', fill: FAINT, anchor: 'middle' }))
-    quiet.push([y + 18, y + 58])
-    y += 66
-  }
 
   if (opts?.presentUrl) {
     const bar = watchLiveBar(y + 22, opts.presentUrl)

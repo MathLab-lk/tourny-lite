@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { GraduationCap, Loader2, Lock, MessageCircle, RotateCcw, Save, Undo2 } from 'lucide-react'
+import { Award, GraduationCap, Loader2, Lock, MessageCircle, RotateCcw, Save, Undo2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { easeOutExpo, medalText, StatusChip } from '@/components/tournament/ui-bits'
 import { PodiumEditor, type PodiumValue } from '@/components/tournament/podium-editor'
+import { StudentMarksEditor } from '@/components/tournament/student-marks-editor'
 import { AuditRow } from '@/components/tournament/manage/audit-row'
 import { useAppStore } from '@/store/app-store'
 import { cn } from '@/lib/utils'
@@ -54,18 +55,32 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
   // NOTE: this dialog is remounted via key={event.id} by the parent,
   // so local state initializes fresh for each opened event.
 
+  // Events already carrying student marks are scored (and corrected)
+  // through the mark sheet — the podium console locks for them.
+  const studentScoreIds = useMemo(
+    () => new Set((detail?.studentScores ?? []).map((s) => s.eventId)),
+    [detail]
+  )
+  const isStudentEvent = Boolean(
+    event &&
+      (event.scoringMode === 'students' ||
+        event.result?.derivedFromStudents === true ||
+        studentScoreIds.has(event.id))
+  )
+
+  // Which console this dialog shows — the same mode switch as the
+  // scoring console, so marks can be entered right from the
+  // overview's bird's-eye matrix. Locked to the mark sheet once
+  // student marks exist.
+  const [scoreMode, setScoreMode] = useState<'podium' | 'students'>(() =>
+    isStudentEvent ? 'students' : 'podium'
+  )
+
   const isCorrection = Boolean(event?.result)
   const audit = useAppStore((s) => s.audit)
 
-  // Student mark sheet state for this event (read view).
-  const isStudentEvent = useMemo(
-    () =>
-      Boolean(event) &&
-      (event!.scoringMode === 'students' ||
-        event!.result?.derivedFromStudents === true ||
-        (detail?.studentScores ?? []).some((s) => s.eventId === event!.id)),
-    [event, detail]
-  )
+  // Recorded mark sheet for this event — the read-only view guests
+  // and signed-out visitors see.
   const sheetRows = useMemo(() => {
     if (!event || !detail) return []
     const studentById = new Map(detail.students.map((s) => [s.id, s]))
@@ -177,9 +192,53 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
             </div>
           ) : null}
 
-          {/* Result view — the podium editor for classic events, the
-              recorded mark sheet for student-scored ones. */}
-          {isStudentEvent ? (
+          {/* How this event is scored — the same mode switch as the
+              scoring console, so student marks can be entered right
+              here from the overview. Locked to the mark sheet once
+              marks exist. */}
+          {session ? (
+            <div className="flex gap-1 rounded-lg border bg-muted/30 p-1" role="tablist" aria-label="Scoring mode">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={scoreMode === 'podium'}
+                disabled={isStudentEvent && scoreMode !== 'podium'}
+                onClick={() => setScoreMode('podium')}
+                className={cn(
+                  'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors',
+                  scoreMode === 'podium'
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                  isStudentEvent && scoreMode !== 'podium' && 'cursor-not-allowed opacity-50'
+                )}
+                title={isStudentEvent ? 'This event is scored by student marks' : 'Pick the center podium directly'}
+              >
+                <Award className="h-3.5 w-3.5" aria-hidden /> Center podium
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={scoreMode === 'students'}
+                onClick={() => setScoreMode('students')}
+                className={cn(
+                  'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors',
+                  scoreMode === 'students'
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+                title="Enter per-student marks; the podium is derived from each center's sums"
+              >
+                <GraduationCap className="h-3.5 w-3.5" aria-hidden /> Student marks
+              </button>
+            </div>
+          ) : null}
+
+          {/* Result view — the mark sheet console for signed-in users,
+              the recorded read-only sheet for guests on student-scored
+              events, the podium editor otherwise. */}
+          {session && scoreMode === 'students' ? (
+            <StudentMarksEditor event={event} onDone={onClose} />
+          ) : isStudentEvent ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-[13px] font-semibold">
                 <GraduationCap className="h-4 w-4 text-primary" aria-hidden />
@@ -235,7 +294,7 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
               ) : null}
               <p className="text-[11px] text-muted-foreground">
                 Each center&rsquo;s entry is the sum of its students&rsquo; marks; the podium above was derived from those
-                sums and pays the fixed place points. Corrections are made from the Scoring console → Student marks.
+                sums and pays the fixed place points.
               </p>
             </div>
           ) : (
@@ -250,42 +309,12 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
           )}
 
           {session ? (
-            <>
-              <div className="grid gap-4 border-t pt-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="me-notes" className="text-xs text-muted-foreground">Notes</Label>
-                  <Textarea id="me-notes" className="min-h-16" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional remarks" disabled={isStudentEvent} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="me-reason" className="text-xs text-muted-foreground">
-                    Justification {event.result ? '(required for corrections)' : '(optional)'}
-                  </Label>
-                  <Textarea
-                    id="me-reason"
-                    className={cn('min-h-16', event.result && !reason.trim() && 'border-amber-600/50')}
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder={event.result ? 'e.g. Transcription error on the mark sheet' : ''}
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-                {isStudentEvent ? (
-                  <p className="text-[13px] text-muted-foreground">
-                    This event is scored by student marks — correct it from <span className="font-medium">Scoring → Student marks</span>, or reset it below.
-                  </p>
-                ) : (
-                  <Button
-                    className="gap-1.5 font-semibold"
-                    onClick={save}
-                    disabled={busy !== null || (!podium.first && !podium.second && !podium.third) || (isCorrection && !reason.trim() && dirty)}
-                  >
-                    {busy === 'save' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
-                    {event.result ? 'Save correction' : 'Record result'}
-                  </Button>
-                )}
-                {event.result && isAdmin ? (
+            scoreMode === 'students' ? (
+              // The mark sheet editor above carries its own notes,
+              // justification and submit flow — only the admin
+              // broadcast controls remain for a recorded result.
+              event.result && isAdmin ? (
+                <div className="flex flex-wrap items-center gap-2 border-t pt-4">
                   <Button
                     variant="ghost"
                     className="gap-1.5"
@@ -300,43 +329,65 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
                     )}
                     Share
                   </Button>
-                ) : null}
-                {event.result && isAdmin ? (
                   <Button variant="ghost" className="gap-1.5 text-destructive hover:text-destructive" onClick={() => setResetOpen((v) => !v)} disabled={busy !== null}>
                     <RotateCcw className="h-4 w-4" aria-hidden /> Reset…
                   </Button>
-                ) : null}
-              </div>
+                </div>
+              ) : null
+            ) : (
+              <>
+                <div className="grid gap-4 border-t pt-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="me-notes" className="text-xs text-muted-foreground">Notes</Label>
+                    <Textarea id="me-notes" className="min-h-16" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional remarks" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="me-reason" className="text-xs text-muted-foreground">
+                      Justification {event.result ? '(required for corrections)' : '(optional)'}
+                    </Label>
+                    <Textarea
+                      id="me-reason"
+                      className={cn('min-h-16', event.result && !reason.trim() && 'border-amber-600/50')}
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      placeholder={event.result ? 'e.g. Transcription error on the mark sheet' : ''}
+                    />
+                  </div>
+                </div>
 
-              {/* Reset confirmation — unfolds in place like a
-                  drawer, never snapping open. */}
-              <AnimatePresence initial={false}>
-                {resetOpen ? (
-                  <motion.div
-                    key="reset-confirm"
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.28, ease: easeOutExpo }}
-                    className="overflow-hidden"
+                <div className="flex flex-wrap items-center gap-2 border-t pt-4">
+                  <Button
+                    className="gap-1.5 font-semibold"
+                    onClick={save}
+                    disabled={busy !== null || (!podium.first && !podium.second && !podium.third) || (isCorrection && !reason.trim() && dirty)}
                   >
-                    <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3">
-                      <p className="text-sm font-semibold text-destructive">Reset this result?</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        The podium is cleared and the event returns to pending. A justification is required.
-                      </p>
-                      <div className="mt-2 flex gap-2">
-                        <Button size="sm" variant="destructive" className="gap-1.5" onClick={doReset} disabled={busy !== null || !reason.trim()}>
-                          {busy === 'reset' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Undo2 className="h-4 w-4" aria-hidden />}
-                          Confirm reset
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => setResetOpen(false)}>Cancel</Button>
-                      </div>
-                    </div>
-                  </motion.div>
-                ) : null}
-              </AnimatePresence>
-            </>
+                    {busy === 'save' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
+                    {event.result ? 'Save correction' : 'Record result'}
+                  </Button>
+                  {event.result && isAdmin ? (
+                    <Button
+                      variant="ghost"
+                      className="gap-1.5"
+                      onClick={() => void shareResult()}
+                      disabled={busy !== null}
+                      title="Send this podium to the WhatsApp group"
+                    >
+                      {busy === 'share' ? (
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      ) : (
+                        <MessageCircle className="h-4 w-4" aria-hidden />
+                      )}
+                      Share
+                    </Button>
+                  ) : null}
+                  {event.result && isAdmin ? (
+                    <Button variant="ghost" className="gap-1.5 text-destructive hover:text-destructive" onClick={() => setResetOpen((v) => !v)} disabled={busy !== null}>
+                      <RotateCcw className="h-4 w-4" aria-hidden /> Reset…
+                    </Button>
+                  ) : null}
+                </div>
+              </>
+            )
           ) : (
             <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed p-4">
               <Lock className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -348,6 +399,49 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
               </Button>
             </div>
           )}
+
+          {/* Reset confirmation — unfolds in place like a drawer, never
+              snapping open. In students mode the justification lives
+              here: the mark sheet editor owns the other inputs. */}
+          {session ? (
+            <AnimatePresence initial={false}>
+              {resetOpen ? (
+                <motion.div
+                  key="reset-confirm"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.28, ease: easeOutExpo }}
+                  className="overflow-hidden"
+                >
+                  <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3">
+                    <p className="text-sm font-semibold text-destructive">Reset this result?</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {scoreMode === 'students' || isStudentEvent
+                        ? 'The podium and the whole mark sheet are cleared and the event returns to pending. A justification is required.'
+                        : 'The podium is cleared and the event returns to pending. A justification is required.'}
+                    </p>
+                    {scoreMode === 'students' ? (
+                      <Textarea
+                        aria-label="Reason for the reset"
+                        className="mt-2 min-h-14"
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        placeholder="e.g. Marks were entered for the wrong event"
+                      />
+                    ) : null}
+                    <div className="mt-2 flex gap-2">
+                      <Button size="sm" variant="destructive" className="gap-1.5" onClick={doReset} disabled={busy !== null || !reason.trim()}>
+                        {busy === 'reset' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Undo2 className="h-4 w-4" aria-hidden />}
+                        Confirm reset
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setResetOpen(false)}>Cancel</Button>
+                    </div>
+                  </div>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+          ) : null}
 
           {/* Per-event history */}
           {eventAudit.length > 0 ? (

@@ -372,17 +372,17 @@ function render(lines: (string | null)[]): string {
   return lines.filter((l): l is string => l !== null).join('\n')
 }
 
-/** Overall standings — one line per center that has scored. */
+/** Overall standings — one line per center, points or not: the
+ *  group sees the full table, including centers yet to score. */
 export function buildStandingsMessage(
   detail: TournamentDetailDTO,
   opts?: { presentUrl?: string | null }
 ): string {
   const { tournament, standings } = detail
-  const scored = standings.filter((r) => r.total > 0)
-  if (scored.length === 0) {
-    throw new WahaError('No results have been recorded yet — nothing to share.', 400)
+  if (standings.length === 0) {
+    throw new WahaError('No centers yet — nothing to share.', 400)
   }
-  const lines = scored.map((row, i) => {
+  const lines = standings.map((row, i) => {
     const prefix = i < 3 ? MEDALS[i] : `${i + 1}.`
     return `${prefix} *${centerLabel(row)}* — ${row.total} pts`
   })

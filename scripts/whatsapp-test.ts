@@ -767,7 +767,7 @@ async function main() {
       liveStandings?.caption
     )
 
-    // 12 scored centers → capped at 10 + "and 2 more centers below"
+    // 12 centers — every one of them is on the card, however many
     const many = mkDetail()
     many.standings = Array.from({ length: 12 }, (_, i) => ({
       rank: i + 1,
@@ -779,12 +779,26 @@ async function main() {
       bronze: 0,
       total: 100 - i,
     }))
-    const capped = buildStandingsCard(many)
-    ok('standings card caps at 10 rows and mentions the rest', Boolean(capped?.svg.includes('and 2 more centers below')), capped?.caption)
+    const allShown = buildStandingsCard(many)
+    ok(
+      'standings card shows every center, however many there are',
+      Boolean(allShown?.svg.includes('>111<') && !allShown.svg.includes('more centers below')),
+      allShown?.caption
+    )
+
+    // A center yet to score still gets its row — the broadcast is
+    // the whole table, not only the ones with points.
+    const withZero = mkDetail()
+    withZero.standings = [
+      ...withZero.standings,
+      { rank: 3, centerId: 'c-999', centerCode: '999', centerName: '', gold: 0, silver: 0, bronze: 0, total: 0 },
+    ]
+    const zeroCard = buildStandingsCard(withZero)
+    ok('standings card includes centers with 0 points', Boolean(zeroCard?.svg.includes('>999<')), zeroCard?.caption)
 
     const empty = mkDetail()
     empty.standings = []
-    ok('standings card with nothing scored builds none (text path answers)', buildStandingsCard(empty) === null)
+    ok('standings card with no centers builds none (text path answers)', buildStandingsCard(empty) === null)
 
     console.log('\n── event card caption ──')
     console.log(card?.caption)
