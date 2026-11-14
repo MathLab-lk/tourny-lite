@@ -30,6 +30,7 @@ model Tournament {
   divisions Division[]
   games     GameType[]
   centers   Center[]
+  students  Student[]
   events    TournamentEvent[]
   results   EventResult[]
 }
@@ -74,12 +75,17 @@ model TournamentEvent {
   subEventIndex Int
   label         String
   status        String @default("pending") // pending | in_progress | completed
+  // How this event is scored: "podium" = the classic 3-tap center
+  // podium; "students" = individual student marks whose per-center
+  // sums derive the podium automatically.
+  scoringMode   String @default("podium") // podium | students
 
   tournament Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   division   Division      @relation(fields: [divisionId], references: [id], onDelete: Cascade)
   game       GameType      @relation(fields: [gameId], references: [id], onDelete: Cascade)
   result     EventResult?
   auditLogs  AuditLog[]
+  studentScores StudentScore[]
 
   @@unique([divisionId, gameId, subEventIndex])
   @@index([tournamentId])
@@ -97,8 +103,59 @@ model Center {
   firstPlaceResults  EventResult[] @relation("FirstPlace")
   secondPlaceResults EventResult[] @relation("SecondPlace")
   thirdPlaceResults  EventResult[] @relation("ThirdPlace")
+  students           Student[]
 
   @@unique([tournamentId, centerCode])
+  @@index([tournamentId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Students — individual competitors belonging to a center.
+// They are identified by name in the field, but the system keys
+// them on an internal id so two students with the same name never
+// collide. centerId is nullable: the roster is often built on the
+// go, and an unassigned student's marks count toward the student
+// ranking but toward no center sum until they are assigned.
+// ─────────────────────────────────────────────────────────────
+
+model Student {
+  id           String   @id @default(cuid())
+  tournamentId String
+  centerId     String?
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tournament Tournament     @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  center     Center?        @relation(fields: [centerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  scores     StudentScore[]
+
+  @@index([tournamentId])
+  @@index([centerId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Student marks — one score per student per event. Unlike center
+// podiums (fixed marks per place), student marks are custom values
+// typed off the field mark sheet. Per-event center sums of these
+// marks decide the event's center podium (see student-service).
+// ─────────────────────────────────────────────────────────────
+
+model StudentScore {
+  id           String   @id @default(cuid())
+  tournamentId String
+  eventId      String
+  studentId    String
+  marks        Float
+  recordedBy   String   @default("")
+  notes        String   @default("")
+  recordedAt   DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  event   TournamentEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  student Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, studentId])
   @@index([tournamentId])
 }
 
@@ -111,6 +168,10 @@ model EventResult {
   thirdPlaceCenterId  String?
   recordedBy         String   @default("")
   notes              String   @default("")
+  // True when the podium was derived from student marks rather
+  // than picked manually — such results are corrected by editing
+  // the student marks, never by moving podium places by hand.
+  derivedFromStudents Boolean  @default(false)
   recordedAt         DateTime @default(now())
   updatedAt          DateTime @updatedAt
 

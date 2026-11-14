@@ -180,7 +180,7 @@ export function OverviewView() {
       <motion.div variants={staggerParent} initial="hidden" animate="show">
         {/* Progress stats */}
         <StatStrip
-          className="mt-5"
+          className="mt-5 sm:grid-cols-5"
           items={[
             {
               label: 'Completed',
@@ -197,6 +197,7 @@ export function OverviewView() {
             { label: 'In progress', value: <AnimatedNumber value={progress.inProgress} /> },
             { label: 'Pending', value: <AnimatedNumber value={progress.pending} /> },
             { label: 'Centers', value: <AnimatedNumber value={centers.length} /> },
+            { label: 'Students', value: <AnimatedNumber value={detail.students.length} /> },
           ]}
         />
 

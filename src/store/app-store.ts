@@ -10,6 +10,8 @@ import type {
   InviteDTO,
   ResultSubmitPayload,
   SessionUserDTO,
+  StudentInput,
+  StudentScoresSubmitPayload,
   TournamentDetailDTO,
   TournamentSummaryDTO,
 } from '@/lib/types'
@@ -19,11 +21,20 @@ export type View =
   | 'overview'
   | 'scoring'
   | 'centers'
+  | 'students'
   | 'history'
   | 'settings'
 export type PrintMode = 'progress' | null
 
 const queueKey = (tid: string) => `tourny_lite_queue_${tid}`
+
+/** Offline submissions are queued on the device until the
+ *  connection / session returns. Both scoring modes queue the same
+ *  way; entries written before student marks existed have no kind
+ *  and are normalized to podium payloads on read. */
+type QueuedSubmission =
+  | { kind: 'podium'; payload: ResultSubmitPayload }
+  | { kind: 'students'; payload: StudentScoresSubmitPayload }
 
 /** Error carrying the HTTP status so callers can branch on 401/403/404. */
 class ApiError extends Error {
@@ -44,16 +55,25 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return body
 }
 
-function readQueue(tid: string): ResultSubmitPayload[] {
+function readQueue(tid: string): QueuedSubmission[] {
   if (typeof window === 'undefined') return []
   try {
-    return JSON.parse(window.localStorage.getItem(queueKey(tid)) ?? '[]') as ResultSubmitPayload[]
+    const raw = JSON.parse(window.localStorage.getItem(queueKey(tid)) ?? '[]') as unknown
+    if (!Array.isArray(raw)) return []
+    return raw.map((item) => {
+      const q = item as Partial<QueuedSubmission> & Partial<ResultSubmitPayload>
+      if (q && (q as { kind?: string }).kind === 'students') {
+        return { kind: 'students', payload: q.payload as StudentScoresSubmitPayload }
+      }
+      // Legacy entries (pre-student-marks) are bare podium payloads.
+      return { kind: 'podium', payload: q as ResultSubmitPayload }
+    })
   } catch {
     return []
   }
 }
 
-function writeQueue(tid: string, queue: ResultSubmitPayload[]) {
+function writeQueue(tid: string, queue: QueuedSubmission[]) {
   if (typeof window === 'undefined') return
   window.localStorage.setItem(queueKey(tid), JSON.stringify(queue))
   window.dispatchEvent(new CustomEvent('tourny-queue-changed', { detail: tid }))
@@ -131,6 +151,15 @@ interface AppState {
   deleteTournament: (id: string) => Promise<boolean>
   updateTournament: (id: string, patch: Record<string, unknown>) => Promise<boolean>
   submitResult: (payload: ResultSubmitPayload) => Promise<{ ok: boolean; queued: boolean; error?: string }>
+  submitStudentScores: (
+    payload: StudentScoresSubmitPayload
+  ) => Promise<{ ok: boolean; queued: boolean; error?: string }>
+  addStudents: (inputs: StudentInput[]) => Promise<{ ok: boolean; error?: string }>
+  updateStudent: (
+    studentId: string,
+    patch: { name?: string; centerId?: string | null }
+  ) => Promise<{ ok: boolean; error?: string }>
+  removeStudent: (studentId: string) => Promise<{ ok: boolean; error?: string }>
   resetResult: (eventId: string, reason: string) => Promise<boolean>
   setEventStatus: (eventId: string, status: string) => Promise<boolean>
   sendWhatsApp: (
@@ -534,12 +563,89 @@ export const useAppStore = create<AppState>((set, get) => ({
         // Network down or session expired — keep the result on this device
         // and sync it once the connection / session is restored.
         const queue = readQueue(tid)
-        queue.push(payload)
+        queue.push({ kind: 'podium', payload })
         writeQueue(tid, queue)
         return { ok: true, queued: true }
       }
       const message = err instanceof Error ? err.message : 'Failed to submit result'
       return { ok: false, queued: false, error: message }
+    }
+  },
+
+  submitStudentScores: async (payload) => {
+    const tid = get().activeTournamentId
+    try {
+      await api('/api/results/students', { method: 'POST', body: JSON.stringify(payload) })
+      await Promise.all([get().refreshActive(), get().loadTournaments()])
+      return { ok: true, queued: false }
+    } catch (err) {
+      const offline = err instanceof TypeError
+      const unauthenticated = err instanceof ApiError && err.status === 401
+      if ((offline || unauthenticated) && tid) {
+        // Mark sheets queue offline exactly like podium results.
+        const queue = readQueue(tid)
+        queue.push({ kind: 'students', payload })
+        writeQueue(tid, queue)
+        return { ok: true, queued: true }
+      }
+      const message = err instanceof Error ? err.message : 'Failed to submit student marks'
+      return { ok: false, queued: false, error: message }
+    }
+  },
+
+  // ── Students (roster + rankings) ──────────────────────
+
+  addStudents: async (inputs) => {
+    const tid = get().activeTournamentId
+    if (!tid) return { ok: false, error: 'No tournament selected' }
+    try {
+      await api(`/api/tournaments/${tid}/students`, {
+        method: 'POST',
+        body: JSON.stringify({ students: inputs }),
+      })
+      await Promise.all([get().refreshActive(), get().loadTournaments()])
+      return { ok: true }
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Could not add the students',
+      }
+    }
+  },
+
+  updateStudent: async (studentId, patch) => {
+    const tid = get().activeTournamentId
+    if (!tid) return { ok: false, error: 'No tournament selected' }
+    try {
+      await api(`/api/tournaments/${tid}/students`, {
+        method: 'PATCH',
+        body: JSON.stringify({ studentId, ...patch }),
+      })
+      await Promise.all([get().refreshActive(), get().loadTournaments()])
+      return { ok: true }
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Could not update the student',
+      }
+    }
+  },
+
+  removeStudent: async (studentId) => {
+    const tid = get().activeTournamentId
+    if (!tid) return { ok: false, error: 'No tournament selected' }
+    try {
+      await api(`/api/tournaments/${tid}/students`, {
+        method: 'DELETE',
+        body: JSON.stringify({ studentId }),
+      })
+      await get().refreshActive()
+      return { ok: true }
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Could not remove the student',
+      }
     }
   },
 
@@ -643,16 +749,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!tid) return
     const queue = readQueue(tid)
     if (queue.length === 0) return
-    const remaining: ResultSubmitPayload[] = []
-    for (const payload of queue) {
+    const remaining: QueuedSubmission[] = []
+    for (const item of queue) {
       try {
-        await api('/api/results', { method: 'POST', body: JSON.stringify(payload) })
+        const url = item.kind === 'students' ? '/api/results/students' : '/api/results'
+        await api(url, { method: 'POST', body: JSON.stringify(item.payload) })
       } catch (err) {
         const offline = err instanceof TypeError
         const unauthenticated = err instanceof ApiError && err.status === 401
         if (offline || unauthenticated) {
           // Still offline or signed out — keep the rest queued.
-          remaining.push(payload)
+          remaining.push(item)
         }
         // Validation errors (other 4xx) are dropped: the event state
         // changed on the server; the operator can re-enter if needed.

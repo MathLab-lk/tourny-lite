@@ -11,6 +11,12 @@ Run an entire event from one lightweight application:
   with a single click.
 - **Guided custom setup** — design any competition: your own scoring scheme,
   divisions, games, event counts and center roster in three steps.
+- **Student rankings (experimental)** — events can be scored by individual
+  student marks instead of a picked podium: students (name-identified,
+  internally keyed so same names never collide) belong to centers and earn
+  custom marks per event; each center's entry is the sum of its students'
+  marks, and the podium — plus the fixed place points — is derived from
+  those sums. A live student leaderboard ranks every competitor.
 - **Field scoring console** — touch-optimised for phones and tablets.
   Scorekeepers pick a division, a game and an event, then assign the podium
   with three taps. Results saved while offline sync automatically.
@@ -53,7 +59,7 @@ restored with the browser's back button:
 | --- | --- |
 | `/` | Tournaments (home) |
 | `/t/{id}` | A tournament's Overview |
-| `/t/{id}/scoring` · `/t/{id}/centers` · `/t/{id}/history` · `/t/{id}/settings` | The other views |
+| `/t/{id}/scoring` · `/t/{id}/centers` · `/t/{id}/students` · `/t/{id}/history` · `/t/{id}/settings` | The other views |
 | `/present/{id}` | The public guest scoreboard (no sign-in) |
 
 - **Home** — the tournament list; every tournament opens on its Overview.
@@ -83,6 +89,40 @@ The roster is fully editable: add centers in bulk (code + optional name),
 remove centers (with a confirmation that spells out what the standings
 lose). Edits flow everywhere immediately — standings, podium pickers and
 shared cards.
+
+### Students & student rankings (experimental)
+
+Some events arrive as **mark sheets** — per-student marks — rather than a
+picked center podium. Any event can be scored either way; the Scoring
+console shows both tabs (*Center podium* / *Student marks*).
+
+- **Roster on the go** — students are added by name (any signed-in staff
+  member can, straight from the field), optionally with their center.
+  Centers can be assigned later as the lists arrive; two students may
+  share a name — the system keys them on internal ids and shows a short
+  suffix (`#a4f2`) whenever a name repeats, so they can never be confused.
+- **Custom marks** — the mark sheet gives each scored student their own
+  marks (any non-negative number, decimals included), with as many or as
+  few students per center as the event needs — the count can vary by
+  event and by center.
+- **Derived podium** — each center's event entry is the sum of its
+  students' marks; centers are ranked by that sum against the other
+  centers, and the top three earn the event's podium places, paying the
+  usual fixed points (75/50/25 by default). The preview updates live as
+  you type. Ties on sums break by center code.
+- **Student ranking** — the Students view ranks every competitor by total
+  marks (tie-break: events contested, then best single mark), live.
+- **Same guardrails** — correcting a mark sheet requires a justification
+  and lands in the audit trail; reassigning or removing a student with
+  recorded marks re-derives every affected event automatically; resetting
+  a student-scored event clears its mark sheet too.
+- **Offline field entry** — mark sheets queue on the device and sync
+  automatically, exactly like podium results.
+
+This feature is experimental: it ships on the `feature/student-rankings`
+branch and is meant to run as a separate experimental deployment (see
+[deploy/README.md](deploy/README.md) — *Experimental build*) so the stable
+container is never disturbed.
 
 ### Invitation codes
 
@@ -189,6 +229,7 @@ With the dev server running:
 
 ```bash
 bun run scripts/battle-test.ts          # core suite (a few assertions are state-dependent)
+bun run scripts/student-test.ts         # student rankings suite (roster, mark sheets, derivation)
 bun run scripts/waha-mock.ts 3001 &     # mock WAHA server
 BASE_URL=http://localhost:3000 bun run scripts/whatsapp-test.ts
 ```
@@ -201,6 +242,16 @@ the audit trail, center management — bulk add, **editing (code, name,
 location, duplicate-code conflicts)** and removal — the URL routes
 (including the public present page and 404 fall-through), the live
 event stream, concurrent submissions and account management.
+
+The student suite (63 assertions) covers the experimental rankings:
+roster management and role enforcement (staff add, admin edit/move/remove,
+same-name students with distinct internal ids), mark sheet guardrails
+(empty/negative/duplicate-student rejections), the derived center podium
+and fixed place points from per-center sums, the student leaderboard and
+its ordering, corrections with mandatory justification (audit-trailed),
+the manual-podium lockout on student events, automatic re-derivation
+after reassignment and removal, reset (clearing the mark sheet) and a
+classic-podium regression pass.
 
 The WhatsApp suite (100 assertions) covers access control on every
 endpoint, config save/masking, session + group discovery, all three
@@ -245,3 +296,5 @@ scripts/                 Battle test suite + demo seeder
 | `DATABASE_URL` | SQLite file path, e.g. `file:./db/custom.db` |
 | `AUTH_SECRET` | Secret used to sign session cookies — use a long random value in production |
 | `PUBLIC_BASE_URL` | Optional: public address used for guest links in shared messages (defaults to the request's host) |
+| `SESSION_COOKIE_NAME` | Optional: session cookie name — the experimental build sets `tourny_session_exp` so it never fights the stable build over the browser cookie |
+| `APP_VARIANT` | Optional: set to `experimental` to badge the UI with an amber "Exp" chip (used by the experimental compose file) |

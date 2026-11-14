@@ -40,6 +40,16 @@ export async function submitResult(payload: ResultSubmitPayload) {
   if (!event) throw new Error('Event not found')
   if (event.tournament.status === 'archived') throw new Error('Tournament is archived')
 
+  // An event scored by student marks derives its podium from the
+  // per-center sums — it is corrected by editing the mark sheet,
+  // never by moving podium places by hand.
+  const studentScoreCount = await db.studentScore.count({ where: { eventId: event.id } })
+  if (studentScoreCount > 0) {
+    throw new Error(
+      'This event is scored by student marks — correct the mark sheet (or reset the result) instead of assigning the podium manually'
+    )
+  }
+
   const placeIds = [payload.firstPlaceCenterId, payload.secondPlaceCenterId, payload.thirdPlaceCenterId]
   const filled = placeIds.filter((v): v is string => Boolean(v))
   if (filled.length === 0) throw new Error('Assign at least one podium place before submitting')
@@ -114,7 +124,7 @@ export async function submitResult(payload: ResultSubmitPayload) {
 
   await db.tournamentEvent.update({
     where: { id: event.id },
-    data: { status: 'completed' },
+    data: { status: 'completed', scoringMode: 'podium' },
   })
 
   emitTournamentChanged(event.tournamentId)
@@ -127,7 +137,9 @@ async function centerCodeOf(centerId: string | null | undefined): Promise<string
   return c?.centerCode ?? null
 }
 
-/** Reset (delete) a result — requires reason, logs audit, returns event to pending. */
+/** Reset (delete) a result — requires reason, logs audit, returns
+ *  event to pending. For student-scored events this also clears the
+ *  mark sheet, so the event starts clean whichever way it is re-scored. */
 export async function resetResult(eventId: string, reason: string, actor: string) {
   const result = await db.eventResult.findUnique({ where: { eventId } })
   if (!result) throw new Error('No result recorded for this event')
@@ -144,6 +156,7 @@ export async function resetResult(eventId: string, reason: string, actor: string
       actor: actor.trim() || 'M&E Console',
     },
   })
+  await db.studentScore.deleteMany({ where: { eventId } })
   await db.eventResult.delete({ where: { id: result.id } })
   await db.tournamentEvent.update({ where: { id: eventId }, data: { status: 'pending' } })
 

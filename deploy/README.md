@@ -49,6 +49,68 @@ create the organiser account, then issue scorekeeper accounts from
 *Team & access*. Reading tournaments and results stays public; every write
 requires a signed-in account.
 
+## Experimental build (student rankings)
+
+The **student rankings** feature is experimental and ships on the
+`feature/student-rankings` branch. It runs as a **second, fully isolated
+deployment** beside the stable container — the stable build is never
+touched, updated or restarted by it.
+
+| | Stable | Experimental |
+| --- | --- | --- |
+| Branch | `main` | `feature/student-rankings` |
+| Compose file | `deploy/docker-compose.yml` | `deploy/docker-compose.experimental.yml` |
+| Compose project | `tourny-lite` (folder default) | `tourny-lite-experimental` (pinned in the file) |
+| Image / build name | `tourny-lite` | `tourny-lite-experimental` |
+| Container name | `tourny-lite` | `tourny-lite-exp` |
+| Host port | `127.0.0.1:8090` | `127.0.0.1:8091` |
+| SQLite volume | `deploy/data/` | `deploy/data-experimental/` |
+| Session cookie | `tourny_session` | `tourny_session_exp` |
+
+The separate cookie name matters: browsers scope cookies by domain, **not
+port**, so without it the two builds would keep signing each other out of
+the same browser. The experimental container also sets
+`APP_VARIANT=experimental`, which adds an amber **Exp** badge next to the
+brand so staff always know which build they are in. The experimental
+build's database starts empty — it shares nothing with stable data.
+
+### Deploy the experimental build
+
+```bash
+# 1. Clone the repo to its own folder (as you planned) and check out the branch:
+git clone https://github.com/MathLab-lk/tourny-lite.git tourny-lite-exp
+cd tourny-lite-exp
+git checkout feature/student-rankings
+
+# 2. Its OWN secret (do not reuse the stable value):
+export AUTH_SECRET="$(openssl rand -hex 32)"
+
+# 3. Build and start (isolated project, image, container, port and volume):
+docker compose -f deploy/docker-compose.experimental.yml up -d --build
+
+# 4. Verify on the new port:
+curl http://127.0.0.1:8091/api
+```
+
+Both containers now run side by side — stable on `:8090`, experimental on
+`:8091`. To follow the feature's development:
+
+```bash
+cd tourny-lite-exp
+git pull
+docker compose -f deploy/docker-compose.experimental.yml up -d --build
+```
+
+To retire the experimental build without touching stable:
+
+```bash
+docker compose -f deploy/docker-compose.experimental.yml down
+# the image and ./deploy/data-experimental volume remain until deleted
+```
+
+> The stable container keeps serving `main` throughout — a broken
+> experimental build can never take it down, and vice versa.
+
 ## Cloudflare Tunnel
 
 Add the ingress block from `cloudflare-config.yml` to the host's existing

@@ -67,6 +67,44 @@ export interface CenterDTO {
   location: string
 }
 
+export interface StudentDTO {
+  id: string
+  name: string
+  centerId: string | null
+  centerCode: string | null
+  createdAt: string
+}
+
+export interface StudentScoreDTO {
+  eventId: string
+  studentId: string
+  marks: number
+  recordedBy: string
+  updatedAt: string
+}
+
+/** One center's aggregate in a student-scored event: the sum of its
+ *  students' marks and the place that sum earns. */
+export interface CenterSumRow {
+  centerId: string
+  centerCode: string
+  sum: number
+  place: number // 1 | 2 | 3 | 0 (= off the podium)
+}
+
+export interface StudentStandingRow {
+  rank: number
+  studentId: string
+  name: string
+  centerId: string | null
+  centerCode: string | null
+  /** number of scored events this student participated in */
+  events: number
+  /** best single-event mark */
+  best: number
+  total: number
+}
+
 export interface ResultDTO {
   id: string
   eventId: string
@@ -78,6 +116,7 @@ export interface ResultDTO {
   thirdPlaceCode: string | null
   recordedBy: string
   notes: string
+  derivedFromStudents: boolean
   recordedAt: string
   updatedAt: string
 }
@@ -93,6 +132,9 @@ export interface EventDTO {
   subEventIndex: number
   label: string
   status: EventStatus
+  /** podium = classic 3-tap center podium; students = per-student
+   *  marks whose per-center sums derive the podium. */
+  scoringMode: 'podium' | 'students'
   result: ResultDTO | null
 }
 
@@ -122,6 +164,9 @@ export interface TournamentDetailDTO {
   centers: CenterDTO[]
   events: EventDTO[]
   standings: StandingRow[]
+  students: StudentDTO[]
+  studentScores: StudentScoreDTO[]
+  studentStandings: StudentStandingRow[]
   progress: TournamentProgress
 }
 
@@ -180,6 +225,23 @@ export interface ResultSubmitPayload {
   firstPlaceCenterId: string | null
   secondPlaceCenterId: string | null
   thirdPlaceCenterId: string | null
+  recordedBy: string
+  notes?: string
+  /** required when overwriting an existing result (correction) */
+  reason?: string
+}
+
+export interface StudentInput {
+  name: string
+  centerId?: string | null
+}
+
+export interface StudentScoresSubmitPayload {
+  eventId: string
+  /** The complete mark sheet for the event: every scored student
+   *  with their custom marks. Students omitted from this list lose
+   *  any previously recorded marks (full-sheet replace). */
+  scores: { studentId: string; marks: number }[]
   recordedBy: string
   notes?: string
   /** required when overwriting an existing result (correction) */

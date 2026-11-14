@@ -1,0 +1,79 @@
+# ------------------------------------------------------------------------------
+# Tourny Lite — EXPERIMENTAL Compose (student rankings feature branch)
+#
+# Runs the experimental build (feature/student-rankings) BESIDE the
+# stable container on the same host without touching it:
+#
+#   ┌────────────────────┬──────────────────────────┬────────────────────┐
+#   │                    │ stable (docker-compose)  │ experimental (this)│
+#   ├────────────────────┼──────────────────────────┼────────────────────┤
+#   │ compose project    │ tourny-lite              │ tourny-lite-exp    │
+#   │ image / build name │ tourny-lite              │ tourny-lite-exp    │
+#   │ container name     │ tourny-lite              │ tourny-lite-exp    │
+#   │ host port          │ 127.0.0.1:8090           │ 127.0.0.1:8091     │
+#   │ data volume        │ deploy/data              │ deploy/data-exp    │
+#   │ session cookie     │ tourny_session           │ tourny_session_exp │
+#   └────────────────────┴──────────────────────────┴────────────────────┘
+#
+# Nothing is shared with the stable deployment: separate project name
+# (networks, volumes), separate image tag, separate container, separate
+# SQLite volume and a different session-cookie name — browsers scope
+# cookies by domain, not port, so without this the two builds would
+# keep signing each other out. APP_VARIANT=experimental adds the amber
+# "Exp" badge in the app so staff always know which build they are in.
+#
+# Usage — clone the repo to its own folder, check out the feature
+# branch, then:
+#
+#   export AUTH_SECRET="$(openssl rand -hex 32)"   # use a DIFFERENT value than stable
+#   docker compose -f deploy/docker-compose.experimental.yml up -d --build
+#
+# Then open http://127.0.0.1:8091 — the badge next to "Tourny Lite"
+# confirms you are on the experimental build.
+# ------------------------------------------------------------------------------
+
+name: tourny-lite-experimental
+
+services:
+  tournament-app-experimental:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: tourny-lite-experimental
+    container_name: tourny-lite-exp
+    restart: unless-stopped
+    init: true # proper PID 1 signal handling / zombie reaping
+    ports:
+      - "127.0.0.1:8091:8090" # strictly localhost, one above the stable 8090
+    volumes:
+      - ./data-experimental:/app/db # separate SQLite database — never touches stable data
+    environment:
+      - TZ=Asia/Colombo
+      - NODE_ENV=production
+      # Sign this build's sessions with its OWN secret (any sign-in on
+      # one build must not mint cookies valid on the other).
+      - AUTH_SECRET=${AUTH_SECRET:-change-me-experimental-build}
+      # Distinct cookie name so the two builds never fight over the
+      # same browser cookie on one host.
+      - SESSION_COOKIE_NAME=tourny_session_exp
+      # Badges the UI (amber "Exp" chip) as the experimental build.
+      - APP_VARIANT=experimental
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M # hard upper limit
+        reservations:
+          cpus: "0.10"
+          memory: 64M # normal operational baseline
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8090/api"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

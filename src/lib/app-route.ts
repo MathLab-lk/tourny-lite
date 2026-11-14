@@ -24,6 +24,7 @@ const VIEW_SEGMENTS: readonly TournamentView[] = [
   'overview',
   'scoring',
   'centers',
+  'students',
   'history',
   'settings',
 ] as const

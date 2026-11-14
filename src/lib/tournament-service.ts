@@ -1,11 +1,13 @@
 import { db } from '@/lib/db'
 import { getPresetById, type TournamentPreset } from '@/lib/preset'
+import { computeStudentStandings } from '@/lib/student-math'
 import {
   type CustomTournamentPayload,
   type DivisionDTO,
   type EventDTO,
   type GameTypeDTO,
   type StandingRow,
+  type StudentDTO,
   type TournamentDetailDTO,
   type TournamentDTO,
   type TournamentProgress,
@@ -178,6 +180,10 @@ export async function getTournamentDetail(
       divisions: { orderBy: { displayOrder: 'asc' } },
       games: { orderBy: { englishName: 'asc' } },
       centers: { orderBy: { centerCode: 'asc' } },
+      students: {
+        orderBy: [{ name: 'asc' }, { createdAt: 'asc' }],
+        include: { center: { select: { centerCode: true } } },
+      },
       events: {
         orderBy: [{ divisionId: 'asc' }, { gameId: 'asc' }, { subEventIndex: 'asc' }],
         include: {
@@ -221,6 +227,32 @@ export async function getTournamentDetail(
     location: c.location,
   }))
 
+  const students: StudentDTO[] = t.students.map((s) => ({
+    id: s.id,
+    name: s.name,
+    centerId: s.centerId,
+    centerCode: s.center?.centerCode ?? null,
+    createdAt: s.createdAt.toISOString(),
+  }))
+
+  const scoreRows = await db.studentScore.findMany({
+    where: { tournamentId },
+    select: {
+      eventId: true,
+      studentId: true,
+      marks: true,
+      recordedBy: true,
+      updatedAt: true,
+    },
+  })
+  const studentScores = scoreRows.map((s) => ({
+    eventId: s.eventId,
+    studentId: s.studentId,
+    marks: s.marks,
+    recordedBy: s.recordedBy,
+    updatedAt: s.updatedAt.toISOString(),
+  }))
+
   const events: EventDTO[] = t.events.map((e) => ({
     id: e.id,
     divisionId: e.divisionId,
@@ -232,6 +264,7 @@ export async function getTournamentDetail(
     subEventIndex: e.subEventIndex,
     label: e.label,
     status: e.status as EventDTO['status'],
+    scoringMode: e.scoringMode === 'students' ? 'students' : 'podium',
     result: e.result
       ? {
           id: e.result.id,
@@ -244,6 +277,7 @@ export async function getTournamentDetail(
           thirdPlaceCode: e.result.thirdCenter?.centerCode ?? null,
           recordedBy: e.result.recordedBy,
           notes: e.result.notes,
+          derivedFromStudents: e.result.derivedFromStudents,
           recordedAt: e.result.recordedAt.toISOString(),
           updatedAt: e.result.updatedAt.toISOString(),
         }
@@ -271,6 +305,9 @@ export async function getTournamentDetail(
     centers,
     events,
     standings,
+    students,
+    studentScores,
+    studentStandings: computeStudentStandings(students, studentScores),
     progress: computeProgress(t.events),
   }
 }

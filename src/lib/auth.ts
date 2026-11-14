@@ -14,7 +14,14 @@ import { db } from '@/lib/db'
  * footprint small: `base64url(payload).base64url(hmacSha256(payload))`.
  */
 
-export const SESSION_COOKIE = 'tourny_session'
+/**
+ * Session cookie name. The experimental build (separate compose file)
+ * runs beside the stable one on the same host under a different port —
+ * but browsers scope cookies by domain, NOT port, so both builds must
+ * not fight over the same cookie. Set SESSION_COOKIE_NAME (e.g.
+ * tourny_session_exp) on the experimental deployment.
+ */
+export const SESSION_COOKIE = process.env.SESSION_COOKIE_NAME?.trim() || 'tourny_session'
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30 // 30 days
 
 export type UserRole = 'admin' | 'judge'

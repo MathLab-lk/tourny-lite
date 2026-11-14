@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Loader2, Lock, MessageCircle, RotateCcw, Save, Undo2 } from 'lucide-react'
+import { GraduationCap, Loader2, Lock, MessageCircle, RotateCcw, Save, Undo2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -14,10 +14,9 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
-import { easeOutExpo } from '@/components/tournament/ui-bits'
+import { easeOutExpo, medalText, StatusChip } from '@/components/tournament/ui-bits'
 import { PodiumEditor, type PodiumValue } from '@/components/tournament/podium-editor'
 import { AuditRow } from '@/components/tournament/manage/audit-row'
-import { StatusChip } from '@/components/tournament/ui-bits'
 import { useAppStore } from '@/store/app-store'
 import { cn } from '@/lib/utils'
 import type { AuditEntryDTO, EventDTO } from '@/lib/types'
@@ -57,6 +56,25 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
 
   const isCorrection = Boolean(event?.result)
   const audit = useAppStore((s) => s.audit)
+
+  // Student mark sheet state for this event (read view).
+  const isStudentEvent = useMemo(
+    () =>
+      Boolean(event) &&
+      (event!.scoringMode === 'students' ||
+        event!.result?.derivedFromStudents === true ||
+        (detail?.studentScores ?? []).some((s) => s.eventId === event!.id)),
+    [event, detail]
+  )
+  const sheetRows = useMemo(() => {
+    if (!event || !detail) return []
+    const studentById = new Map(detail.students.map((s) => [s.id, s]))
+    return detail.studentScores
+      .filter((s) => s.eventId === event.id)
+      .map((s) => ({ ...s, student: studentById.get(s.studentId) }))
+      .filter((r) => r.student)
+      .sort((a, b) => b.marks - a.marks)
+  }, [event, detail])
 
   const eventAudit = useMemo<AuditEntryDTO[]>(
     () => (event ? audit.filter((a) => a.eventId === event.id) : []),
@@ -159,22 +177,84 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
             </div>
           ) : null}
 
-          {/* Podium editor */}
-          <PodiumEditor
-            centers={detail.centers}
-            points={{ first: tournament.pointsFirst, second: tournament.pointsSecond, third: tournament.pointsThird }}
-            value={podium}
-            onChange={setPodium}
-            disabled={!session}
-            compact
-          />
+          {/* Result view — the podium editor for classic events, the
+              recorded mark sheet for student-scored ones. */}
+          {isStudentEvent ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-[13px] font-semibold">
+                <GraduationCap className="h-4 w-4 text-primary" aria-hidden />
+                Scored by student marks
+              </div>
+              {sheetRows.length > 0 ? (
+                <div className="overflow-hidden rounded-lg border">
+                  <table className="w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
+                        <th className="p-2 text-left font-medium">Student</th>
+                        <th className="p-2 text-left font-medium">Center</th>
+                        <th className="p-2 text-right font-medium">Marks</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sheetRows.map((row, i) => (
+                        <tr key={row.studentId} className="border-b last:border-0">
+                          <td className="p-2">
+                            <span className="font-medium">{row.student!.name}</span>
+                            {i < 3 ? (
+                              <span
+                                className={cn(
+                                  'ml-1.5 text-[11px] font-bold',
+                                  i === 0 && medalText.gold,
+                                  i === 1 && medalText.silver,
+                                  i === 2 && medalText.bronze
+                                )}
+                              >
+                                {i + 1}
+                              </span>
+                            ) : null}
+                          </td>
+                          <td className="p-2 tabular-nums text-muted-foreground">
+                            {row.student!.centerCode ?? '—'}
+                          </td>
+                          <td className="p-2 text-right font-semibold tabular-nums">{row.marks}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-[13px] text-muted-foreground">No marks recorded.</p>
+              )}
+              {event.result ? (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border bg-muted/30 px-3 py-2.5 text-[13px] font-semibold tabular-nums">
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Derived podium</span>
+                  <span className={medalText.gold}>1st · {event.result.firstPlaceCode ?? '—'}</span>
+                  <span className={medalText.silver}>2nd · {event.result.secondPlaceCode ?? '—'}</span>
+                  <span className={medalText.bronze}>3rd · {event.result.thirdPlaceCode ?? '—'}</span>
+                </div>
+              ) : null}
+              <p className="text-[11px] text-muted-foreground">
+                Each center&rsquo;s entry is the sum of its students&rsquo; marks; the podium above was derived from those
+                sums and pays the fixed place points. Corrections are made from the Scoring console → Student marks.
+              </p>
+            </div>
+          ) : (
+            <PodiumEditor
+              centers={detail.centers}
+              points={{ first: tournament.pointsFirst, second: tournament.pointsSecond, third: tournament.pointsThird }}
+              value={podium}
+              onChange={setPodium}
+              disabled={!session}
+              compact
+            />
+          )}
 
           {session ? (
             <>
               <div className="grid gap-4 border-t pt-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="me-notes" className="text-xs text-muted-foreground">Notes</Label>
-                  <Textarea id="me-notes" className="min-h-16" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional remarks" />
+                  <Textarea id="me-notes" className="min-h-16" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional remarks" disabled={isStudentEvent} />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="me-reason" className="text-xs text-muted-foreground">
@@ -191,14 +271,20 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
               </div>
 
               <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-                <Button
-                  className="gap-1.5 font-semibold"
-                  onClick={save}
-                  disabled={busy !== null || (!podium.first && !podium.second && !podium.third) || (isCorrection && !reason.trim() && dirty)}
-                >
-                  {busy === 'save' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
-                  {event.result ? 'Save correction' : 'Record result'}
-                </Button>
+                {isStudentEvent ? (
+                  <p className="text-[13px] text-muted-foreground">
+                    This event is scored by student marks — correct it from <span className="font-medium">Scoring → Student marks</span>, or reset it below.
+                  </p>
+                ) : (
+                  <Button
+                    className="gap-1.5 font-semibold"
+                    onClick={save}
+                    disabled={busy !== null || (!podium.first && !podium.second && !podium.third) || (isCorrection && !reason.trim() && dirty)}
+                  >
+                    {busy === 'save' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
+                    {event.result ? 'Save correction' : 'Record result'}
+                  </Button>
+                )}
                 {event.result && isAdmin ? (
                   <Button
                     variant="ghost"

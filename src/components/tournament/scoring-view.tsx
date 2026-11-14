@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Award,
+  GraduationCap,
   Loader2,
   Lock,
   Send,
@@ -25,6 +26,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { useIsDesktop } from '@/hooks/use-mobile'
 import { PodiumEditor, type PodiumValue } from '@/components/tournament/podium-editor'
+import { StudentMarksEditor } from '@/components/tournament/student-marks-editor'
 import { EmptyState, StatusChip, easeOutExpo, medalText, springPop } from '@/components/tournament/ui-bits'
 import { useAppStore } from '@/store/app-store'
 import { cn } from '@/lib/utils'
@@ -51,6 +53,8 @@ export function ScoringView() {
   const [notes, setNotes] = useState('')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  // Which console the record panel shows for the selected event.
+  const [scoreMode, setScoreMode] = useState<'podium' | 'students'>('podium')
 
   const divisions = detail?.divisions ?? []
   const centers = detail?.centers ?? []
@@ -88,8 +92,19 @@ export function ScoringView() {
   const selectedEvent = slots.find((e) => e.id === eventId) ?? null
   const isCorrection = Boolean(selectedEvent?.result)
 
+  // Events already carrying student marks are corrected through the
+  // mark sheet — the podium tab stays visible but locks.
+  const studentScoreIds = useMemo(
+    () => new Set((detail?.studentScores ?? []).map((s) => s.eventId)),
+    [detail]
+  )
+  const isStudentEvent = selectedEvent
+    ? selectedEvent.scoringMode === 'students' || studentScoreIds.has(selectedEvent.id)
+    : false
+
   const openEvent = (e: EventDTO) => {
     setEventId(e.id)
+    setScoreMode(e.scoringMode === 'students' || studentScoreIds.has(e.id) ? 'students' : 'podium')
     setPodium({
       first: e.result?.firstPlaceCenterId ?? null,
       second: e.result?.secondPlaceCenterId ?? null,
@@ -173,44 +188,92 @@ export function ScoringView() {
         </div>
       </div>
 
-      {isCorrection ? (
-        <p className="rounded-md border border-amber-600/40 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-700 dark:text-amber-400">
-          A result is already recorded — saving again corrects it and adds a history entry.
-        </p>
-      ) : null}
+      {/* How this event is scored: the classic center podium, or a
+          per-student mark sheet whose per-center sums derive the
+          podium. Locked to the mark sheet once marks exist. */}
+      <div className="flex gap-1 rounded-lg border bg-muted/30 p-1" role="tablist" aria-label="Scoring mode">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={scoreMode === 'podium'}
+          disabled={isStudentEvent && scoreMode !== 'podium'}
+          onClick={() => setScoreMode('podium')}
+          className={cn(
+            'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors',
+            scoreMode === 'podium'
+              ? 'bg-card text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground',
+            isStudentEvent && scoreMode !== 'podium' && 'cursor-not-allowed opacity-50'
+          )}
+          title={isStudentEvent ? 'This event is scored by student marks' : 'Pick the center podium directly'}
+        >
+          <Award className="h-3.5 w-3.5" aria-hidden /> Center podium
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={scoreMode === 'students'}
+          onClick={() => setScoreMode('students')}
+          className={cn(
+            'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors',
+            scoreMode === 'students'
+              ? 'bg-card text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          )}
+          title="Enter per-student marks; the podium is derived from each center's sums"
+        >
+          <GraduationCap className="h-3.5 w-3.5" aria-hidden /> Student marks
+        </button>
+      </div>
 
-      <PodiumEditor
-        centers={centers}
-        points={{ first: tournament.pointsFirst, second: tournament.pointsSecond, third: tournament.pointsThird }}
-        value={podium}
-        onChange={setPodium}
-        disabled={!session}
-      />
-
-      {session ? (
-        <>
-          <div className="space-y-1.5">
-            <Label htmlFor="judge-notes" className="text-xs text-muted-foreground">Notes (optional)</Label>
-            <Textarea id="judge-notes" className="min-h-16" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Tie-breaks, disqualifications…" />
-          </div>
-          <Button
-            size="lg"
-            className="h-12 w-full gap-2 text-[15px] font-semibold"
-            disabled={!podium.first && !podium.second && !podium.third}
-            onClick={() => setConfirmOpen(true)}
-          >
-            <Send className="h-4 w-4" aria-hidden />
-            {isCorrection ? 'Correct result' : 'Record result'}
-          </Button>
-        </>
+      {scoreMode === 'students' ? (
+        <StudentMarksEditor
+          key={selectedEvent.id}
+          event={selectedEvent}
+          onDone={clearSelection}
+        />
       ) : (
-        <div className="rounded-lg border border-dashed p-5 text-center">
-          <Lock className="mx-auto h-5 w-5 text-muted-foreground/60" aria-hidden />
-          <p className="mt-2 text-sm font-medium">Sign in to record</p>
-          <Button size="sm" className="mt-3" onClick={() => setAuthDialogOpen(true)}>
-            Sign in
-          </Button>
-        </div>
+        <>
+          {isCorrection ? (
+            <p className="rounded-md border border-amber-600/40 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+              A result is already recorded — saving again corrects it and adds a history entry.
+            </p>
+          ) : null}
+
+          <PodiumEditor
+            centers={centers}
+            points={{ first: tournament.pointsFirst, second: tournament.pointsSecond, third: tournament.pointsThird }}
+            value={podium}
+            onChange={setPodium}
+            disabled={!session}
+          />
+
+          {session ? (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="judge-notes" className="text-xs text-muted-foreground">Notes (optional)</Label>
+                <Textarea id="judge-notes" className="min-h-16" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Tie-breaks, disqualifications…" />
+              </div>
+              <Button
+                size="lg"
+                className="h-12 w-full gap-2 text-[15px] font-semibold"
+                disabled={!podium.first && !podium.second && !podium.third}
+                onClick={() => setConfirmOpen(true)}
+              >
+                <Send className="h-4 w-4" aria-hidden />
+                {isCorrection ? 'Correct result' : 'Record result'}
+              </Button>
+            </>
+          ) : (
+            <div className="rounded-lg border border-dashed p-5 text-center">
+              <Lock className="mx-auto h-5 w-5 text-muted-foreground/60" aria-hidden />
+              <p className="mt-2 text-sm font-medium">Sign in to record</p>
+              <Button size="sm" className="mt-3" onClick={() => setAuthDialogOpen(true)}>
+                Sign in
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   ) : null
@@ -340,6 +403,13 @@ export function ScoringView() {
                       )}
                     >
                       <span className="shrink-0 text-sm font-medium">Event {e.subEventIndex}</span>
+                      {e.scoringMode === 'students' || studentScoreIds.has(e.id) ? (
+                        <GraduationCap
+                          className="h-3.5 w-3.5 shrink-0 text-primary"
+                          aria-hidden
+                          aria-label="Scored by student marks"
+                        />
+                      ) : null}
                       {r ? (
                         <motion.span
                           key={`${r.firstPlaceCode ?? ''}/${r.secondPlaceCode ?? ''}/${r.thirdPlaceCode ?? ''}`}
@@ -381,7 +451,7 @@ export function ScoringView() {
               ) : (
                 <div className="rounded-lg border border-dashed px-6 py-16 text-center">
                   <p className="text-[13px] text-muted-foreground">
-                    Select an event to {session ? 'record its podium' : 'view its result'}.
+                    Select an event to {session ? 'record its podium or student marks' : 'view its result'}.
                   </p>
                 </div>
               )}

@@ -7,6 +7,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ClipboardCheck,
+  FlaskConical,
+  GraduationCap,
   History,
   Home,
   LayoutDashboard,
@@ -70,12 +72,26 @@ const PRIMARY_NAV: NavItem[] = [
 
 const MANAGE_NAV: NavItem[] = [
   { key: 'centers', label: 'Centers', icon: Users },
+  { key: 'students', label: 'Students', icon: GraduationCap },
   { key: 'settings', label: 'Settings', icon: Settings },
 ]
 
-export function AppShell({ children }: { children: ReactNode }) {
+/** Badge shown when this deployment is the experimental build
+ *  (APP_VARIANT=experimental) — one glance must be enough to tell
+ *  it apart from the stable container on the same host. */
+function VariantBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none tracking-wider text-amber-700 dark:text-amber-400">
+      <FlaskConical className="h-2.5 w-2.5" aria-hidden />
+      Exp
+    </span>
+  )
+}
+
+export function AppShell({ children, variant = '' }: { children: ReactNode; variant?: string }) {
   const { theme, setTheme } = useTheme()
   const [moreOpen, setMoreOpen] = useState(false)
+  const isExperimental = variant === 'experimental'
 
   const view = useAppStore((s) => s.view)
   const tournaments = useAppStore((s) => s.tournaments)
@@ -137,6 +153,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="flex h-14 shrink-0 items-center gap-2.5 px-4">
           <img src="/logo.svg" alt="" className="h-6 w-6 rounded-lg" width={24} height={24} />
           <span className="text-shine text-[15px] font-semibold tracking-tight">Tourny&nbsp;Lite</span>
+          {isExperimental ? <VariantBadge /> : null}
         </div>
 
         {/* Tournament switcher */}
@@ -278,7 +295,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             />
           )}
         </AnimatePresence>
-        <span className="min-w-0 flex-1 truncate text-center text-[15px] font-semibold tracking-tight">
+        <span className="flex min-w-0 flex-1 items-center justify-center gap-1.5 truncate text-center text-[15px] font-semibold tracking-tight">
+          {isExperimental ? <VariantBadge /> : null}
           <AnimatePresence mode="wait" initial={false}>
             <motion.span
               key={hasTournament ? (activeTournament?.name ?? '') : 'Tourny Lite'}
@@ -388,6 +406,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <>
                 <SheetLink icon={History} label="History" onClick={() => go('history')} />
                 <SheetLink icon={Users} label="Centers" onClick={() => go('centers')} />
+                <SheetLink icon={GraduationCap} label="Students" onClick={() => go('students')} />
                 {isAdmin ? <SheetLink icon={Settings} label="Settings" onClick={() => go('settings')} /> : null}
               </>
             ) : null}
