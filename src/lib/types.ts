@@ -2,7 +2,7 @@
 
 export type TournamentStatus = 'draft' | 'active' | 'completed' | 'archived'
 export type EventStatus = 'pending' | 'in_progress' | 'completed'
-export type AuditAction = 'created' | 'updated' | 'reset'
+export type AuditAction = 'created' | 'updated' | 'reset' | 'restored'
 export type UserRole = 'admin' | 'judge'
 
 export interface SessionUserDTO {
@@ -188,6 +188,13 @@ export interface AuditEntryDTO {
   reason: string
   actor: string
   timestamp: string
+  /** Reset entries only: true when this exact reset can still be
+   *  undone (a recovery snapshot exists and nothing was recorded
+   *  on the event since). */
+  canUndoReset?: boolean
+  /** Reset entries only: true when undo would also bring back the
+   *  student mark sheet, not just the podium. */
+  undoRestoresMarks?: boolean
 }
 
 // ── Custom wizard payload ─────────────────────────────────────

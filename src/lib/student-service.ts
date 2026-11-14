@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { emitTournamentChanged } from '@/lib/bus'
 import { computeCenterSums } from '@/lib/student-math'
+import { discardResetSnapshot } from '@/lib/result-service'
 import type {
   CenterSumRow,
   StudentDTO,
@@ -402,6 +403,10 @@ export async function deriveEventPodiumFromStudents(
     where: { id: eventId },
     data: { status: 'completed' },
   })
+
+  // A result now exists — any undo snapshot from an earlier reset
+  // describes a past this event has moved on from.
+  await discardResetSnapshot(eventId)
 
   emitTournamentChanged(event.tournamentId)
   return { resultId, centerSums }

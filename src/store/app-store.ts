@@ -161,6 +161,7 @@ interface AppState {
   ) => Promise<{ ok: boolean; error?: string }>
   removeStudent: (studentId: string) => Promise<{ ok: boolean; error?: string }>
   resetResult: (eventId: string, reason: string) => Promise<boolean>
+  undoReset: (eventId: string) => Promise<{ ok: boolean; error?: string; restoredScores?: number }>
   setEventStatus: (eventId: string, status: string) => Promise<boolean>
   /** Adds event slots (and optionally a new category/game inline). */
   addEvents: (input: {
@@ -671,10 +672,34 @@ export const useAppStore = create<AppState>((set, get) => ({
         method: 'DELETE',
         body: JSON.stringify({ reason }),
       })
-      await Promise.all([get().refreshActive(), get().loadTournaments()])
+      // The audit feed gains the reset entry (with its undo button)
+      // the moment the reset lands — no extra navigation needed.
+      const tid = get().activeTournamentId
+      const jobs: Promise<unknown>[] = [get().refreshActive(), get().loadTournaments()]
+      if (tid) jobs.push(get().loadAudit(tid))
+      await Promise.all(jobs)
       return true
     } catch {
       return false
+    }
+  },
+
+  undoReset: async (eventId) => {
+    try {
+      const out = await api<{ restoredResult: boolean; restoredScores: number }>(
+        `/api/results/${eventId}/undo-reset`,
+        { method: 'POST' }
+      )
+      const tid = get().activeTournamentId
+      const jobs: Promise<unknown>[] = [get().refreshActive(), get().loadTournaments()]
+      if (tid) jobs.push(get().loadAudit(tid))
+      await Promise.all(jobs)
+      return { ok: true, restoredScores: out.restoredScores }
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'The reset could not be undone.',
+      }
     }
   },
 

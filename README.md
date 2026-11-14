@@ -32,6 +32,13 @@ Run an entire event from one lightweight application:
 - **Coordination tools (M&E)** — a division × game matrix of every event,
   result corrections with mandatory justification, a complete revision
   history, center management and A4 print sheets (event progress).
+- **Undoable resets** — resetting a result keeps a full recovery
+  snapshot (podium + entire mark sheet), so an admin can undo the
+  reset — right from the toast, the history trail or the event
+  dialog — until something new is recorded on the event. Restores
+  are audit-trailed like every other change, and roster drift is
+  handled: removed students are skipped, and a student-derived
+  podium is recomputed from the marks that survived.
 - **Secure by default** — tournaments and results are public to read;
   creating, editing and scoring require a signed-in account. Every result
   records who submitted it.
@@ -42,7 +49,7 @@ Run an entire event from one lightweight application:
 | --- | --- |
 | **Guest** (no account) | View tournaments, standings, the scoreboard, the event grid and the revision history |
 | **Scorekeeper** | Record and correct results, manage event status |
-| **Administrator** | Everything: create / duplicate / delete tournaments, manage centers, reset results, settings, team accounts, WhatsApp sharing |
+| **Administrator** | Everything: create / duplicate / delete tournaments, manage centers, reset and undo-reset results, settings, team accounts, WhatsApp sharing |
 
 The first account created becomes the administrator (first-run setup);
 further accounts are added from *Team & access* — either created directly
@@ -290,6 +297,15 @@ mode, judge lockout), inline creation of a brand-new category and game
 mode lock while a result or mark sheet exists, judge access to status
 changes, student standings and the derived podium, and slot removal
 (cascade + progress recompute).
+
+The undo-reset suite (47 assertions) covers the recovery flow: podium
+reset → undo (byte-exact restore of places, notes and status), mark
+sheet reset → undo (all marks plus the derived podium back), the audit
+feed's undoability flags, role enforcement (judges can neither reset
+nor undo), stale-snapshot refusal once newer data is recorded, the
+single-use snapshot (second undo refused), and roster drift between
+reset and undo (removed students skipped, derived podium recomputed
+from the surviving marks).
 
 The WhatsApp suite (100 assertions) covers access control on every
 endpoint, config save/masking, session + group discovery, all three

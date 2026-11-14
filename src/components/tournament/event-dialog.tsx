@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { ToastAction } from '@/components/ui/toast'
 import { useToast } from '@/hooks/use-toast'
 import { easeOutExpo, medalText, StatusChip } from '@/components/tournament/ui-bits'
 import { PodiumEditor, type PodiumValue } from '@/components/tournament/podium-editor'
@@ -58,6 +59,7 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
   const isAdmin = session?.role === 'admin'
   const submitResult = useAppStore((s) => s.submitResult)
   const resetResult = useAppStore((s) => s.resetResult)
+  const undoReset = useAppStore((s) => s.undoReset)
   const setEventStatus = useAppStore((s) => s.setEventStatus)
   const updateEvent = useAppStore((s) => s.updateEvent)
   const deleteEvent = useAppStore((s) => s.deleteEvent)
@@ -73,6 +75,7 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
   const [notes, setNotes] = useState(event?.result?.notes ?? '')
   const [busy, setBusy] = useState<'save' | 'reset' | 'share' | 'settings' | 'delete' | null>(null)
   const [resetOpen, setResetOpen] = useState(false)
+  const [undoBusy, setUndoBusy] = useState(false)
 
   // ── Slot settings (admins) — initialised fresh per event because
   // the parent remounts this dialog with key={event.id}.
@@ -124,6 +127,13 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
   const eventAudit = useMemo<AuditEntryDTO[]>(
     () => (event ? audit.filter((a) => a.eventId === event.id) : []),
     [audit, event]
+  )
+
+  // The event's latest reset, when it is still undoable — drives
+  // the inline banner and the undo affordances.
+  const undoableReset = useMemo(
+    () => eventAudit.find((a) => a.action === 'reset' && a.canUndoReset) ?? null,
+    [eventAudit]
   )
 
   if (!event || !detail) return null
@@ -191,12 +201,35 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
     }
   }
 
+  const doUndo = async () => {
+    if (!event || undoBusy) return
+    setUndoBusy(true)
+    const out = await undoReset(event.id)
+    setUndoBusy(false)
+    if (out.ok) {
+      toast({
+        title: 'Reset undone',
+        description: `${event.label} — the recorded result${out.restoredScores ? ' and mark sheet' : ''} are back exactly as they were.`,
+      })
+    } else {
+      toast({ title: 'Could not undo the reset', description: out.error, variant: 'destructive' })
+    }
+  }
+
   const doReset = async () => {
     setBusy('reset')
     const ok = await resetResult(event.id, reason.trim() || 'Reset from the console')
     setBusy(null)
     if (ok) {
-      toast({ title: 'Result reset', description: `${event.label} is pending again.` })
+      toast({
+        title: 'Result reset',
+        description: `${event.label} is pending again.`,
+        action: (
+          <ToastAction altText="Undo the reset" onClick={() => void doUndo()}>
+            Undo
+          </ToastAction>
+        ),
+      })
       onClose()
     } else {
       toast({ title: 'Could not reset the result', variant: 'destructive' })
@@ -551,7 +584,8 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {scoreMode === 'students' || isStudentEvent
                         ? 'The podium and the whole mark sheet are cleared and the event returns to pending. A justification is required.'
-                        : 'The podium is cleared and the event returns to pending. A justification is required.'}
+                        : 'The podium is cleared and the event returns to pending. A justification is required.'}{' '}
+                      The reset can be undone until something new is recorded.
                     </p>
                     {scoreMode === 'students' ? (
                       <Textarea
@@ -573,6 +607,27 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
                 </motion.div>
               ) : null}
             </AnimatePresence>
+          ) : null}
+
+          {/* Undo banner — the event sits on a reset that can still
+              be walked back. Lives above the trail so it is the
+              first thing an admin sees on a wrongly-reset event. */}
+          {isAdmin && undoableReset ? (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-sky-600/30 bg-sky-500/5 p-3">
+              <Undo2 className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" aria-hidden />
+              <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+                The last reset can be undone — the recorded result
+                {undoableReset.undoRestoresMarks ? ' and the whole mark sheet' : ''} come back exactly as they were.
+              </p>
+              <Button size="sm" className="shrink-0 gap-1.5" onClick={() => void doUndo()} disabled={undoBusy}>
+                {undoBusy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <Undo2 className="h-4 w-4" aria-hidden />
+                )}
+                Undo reset
+              </Button>
+            </div>
           ) : null}
 
           {/* Per-event history */}

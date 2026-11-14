@@ -1,22 +1,32 @@
 'use client'
 
+import { useState } from 'react'
 import { motion } from 'framer-motion'
+import { Loader2, Undo2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { staggerChild } from '@/components/tournament/ui-bits'
+import { useAppStore } from '@/store/app-store'
 import type { AuditEntryDTO } from '@/lib/types'
 
 /*
- * Shared audit row — used by the History view and the Overview
- * activity feed. One rendering of the same data, everywhere.
- *  Carries staggerChild, so it staggers inside any stagger
- *  parent (History's list) and rides its parent's reveal
- *  elsewhere (Overview, dialogs).
+ * Shared audit row — used by the History view, the Overview
+ * activity feed and the per-event trail inside the event dialog.
+ * One rendering of the same data, everywhere. Carries staggerChild,
+ * so it staggers inside any stagger parent (History's list) and
+ * rides its parent's reveal elsewhere (Overview, dialogs).
+ *
+ * Reset entries that are still undoable carry an inline Undo button
+ * (admins only) — one click restores the podium and mark sheet from
+ * the recovery snapshot taken at reset time.
  */
 
 const ACTION_META: Record<string, { label: string; chip: string }> = {
   created: { label: 'Recorded', chip: 'bg-emerald-600/12 text-emerald-700 dark:text-emerald-400' },
   updated: { label: 'Corrected', chip: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
   reset: { label: 'Reset', chip: 'bg-destructive/10 text-destructive' },
+  restored: { label: 'Restored', chip: 'bg-sky-500/15 text-sky-700 dark:text-sky-400' },
 }
 
 export function parsePodium(json: string): string {
@@ -31,6 +41,26 @@ export function parsePodium(json: string): string {
 
 export function AuditRow({ entry, dense }: { entry: AuditEntryDTO; dense?: boolean }) {
   const meta = ACTION_META[entry.action] ?? { label: entry.action, chip: 'bg-muted text-muted-foreground' }
+  const { toast } = useToast()
+  const isAdmin = useAppStore((s) => s.session?.role === 'admin')
+  const undoReset = useAppStore((s) => s.undoReset)
+  const [undoing, setUndoing] = useState(false)
+
+  const doUndo = async () => {
+    if (undoing) return
+    setUndoing(true)
+    const out = await undoReset(entry.eventId)
+    setUndoing(false)
+    if (out.ok) {
+      toast({
+        title: 'Reset undone',
+        description: `${entry.eventLabel} — the recorded result${out.restoredScores ? ' and mark sheet' : ''} are back exactly as they were.`,
+      })
+    } else {
+      toast({ title: 'Could not undo the reset', description: out.error, variant: 'destructive' })
+    }
+  }
+
   return (
     <motion.li
       variants={staggerChild}
@@ -58,6 +88,27 @@ export function AuditRow({ entry, dense }: { entry: AuditEntryDTO; dense?: boole
             {parsePodium(entry.newValues)}
           </span>
         )}
+        {entry.action === 'reset' && entry.canUndoReset && isAdmin ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 gap-1 rounded-full px-2.5 text-[11px] font-medium"
+            onClick={() => void doUndo()}
+            disabled={undoing}
+            title={
+              entry.undoRestoresMarks
+                ? 'Bring back the podium and the whole mark sheet, exactly as they were before the reset'
+                : 'Bring back the podium exactly as it was before the reset'
+            }
+          >
+            {undoing ? (
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+            ) : (
+              <Undo2 className="h-3 w-3" aria-hidden />
+            )}
+            Undo reset
+          </Button>
+        ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-2.5 text-xs text-muted-foreground">
         {entry.actor ? <span>{entry.actor}</span> : null}

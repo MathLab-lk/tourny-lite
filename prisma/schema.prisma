@@ -86,6 +86,7 @@ model TournamentEvent {
   result     EventResult?
   auditLogs  AuditLog[]
   studentScores StudentScore[]
+  resetSnapshot ResetSnapshot?
 
   @@unique([divisionId, gameId, subEventIndex])
   @@index([tournamentId])
@@ -187,7 +188,7 @@ model EventResult {
 model AuditLog {
   id        String   @id @default(cuid())
   eventId   String
-  action    String // created | updated | reset
+  action    String // created | updated | reset | restored
   oldValues String   @default("") // JSON snapshot
   newValues String   @default("") // JSON snapshot
   reason    String   @default("")
@@ -197,6 +198,28 @@ model AuditLog {
   event TournamentEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@index([eventId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Reset snapshots — recovery points for "undo reset". Written the
+// moment an admin resets a result (the full podium row plus every
+// student mark, not just the audit summary), consumed by the undo
+// action, and discarded whenever newer data is recorded on the
+// event — undoing would then clobber a fresher result. Cascades
+// away with the event slot itself.
+// ─────────────────────────────────────────────────────────────
+
+model ResetSnapshot {
+  id           String   @id @default(cuid())
+  eventId      String   @unique
+  tournamentId String
+  payload      String // JSON: { result, scores, eventStatus, scoringMode }
+  resetBy      String   @default("")
+  createdAt    DateTime @default(now())
+
+  event TournamentEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId])
 }
 
 // ─────────────────────────────────────────────────────────────
