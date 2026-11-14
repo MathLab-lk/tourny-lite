@@ -596,6 +596,128 @@ async function main() {
     ok('no message sent while disabled', readLog().length === before3, readLog().length - before3)
   }
 
+  // ═══ 9b. Auto-share on student mark sheets ═══
+  // The mark-sheet flow records results too (student-rankings mode);
+  // it must announce itself exactly like the podium flow. Regression
+  // guard: the hook used to exist only on POST /api/results, so
+  // student-scored events never auto-shared.
+  section('9b · Auto-share on student mark sheets')
+  {
+    const waitFor = async (cond: () => boolean, ms = 5000): Promise<boolean> => {
+      const deadline = Date.now() + ms
+      while (Date.now() < deadline) {
+        if (cond()) return true
+        await new Promise((r) => setTimeout(r, 200))
+      }
+      return cond()
+    }
+
+    const tournaments = await admin.call('GET', '/api/tournaments')
+    const seeded = tournaments.data.tournaments?.find((t: any) => t.templateId || t.name.includes('Math Competition'))
+    const detail = await admin.call('GET', `/api/tournaments/${seeded.id}`)
+    const centers = detail.data.centers ?? []
+    let open = detail.data.events?.find((e: any) => e.status !== 'completed')
+    if (!open) {
+      // Every seeded slot is completed — append one fresh event.
+      const added = await admin.call('POST', `/api/tournaments/${seeded.id}/events`, {
+        newDivision: { code: 'PROBE', name: 'Auto-share probe division' },
+        newGame: { name: 'Auto-share probe game' },
+        count: 1,
+        scoringMode: 'students',
+      })
+      ok('a fresh event appended', added.status === 200, added)
+      const detail2 = await admin.call('GET', `/api/tournaments/${seeded.id}`)
+      open = detail2.data.events?.find((e: any) => e.status !== 'completed')
+    }
+    ok('an open event is available', Boolean(open), open?.label)
+
+    const enable = await admin.call('PUT', '/api/whatsapp/config', { autoEvents: true })
+    ok('auto-share re-enabled', enable.status === 200 && enable.data.autoEvents === true, enable.data)
+
+    // Two students for center 0, one for center 1 — the per-center
+    // sums derive the podium (center 1 first, center 0 second).
+    const roster = await admin.call('POST', `/api/tournaments/${seeded.id}/students`, {
+      students: [
+        { name: 'Amara Auto-Share', centerId: centers[0].id },
+        { name: 'Nimal Auto-Share', centerId: centers[0].id },
+        { name: 'Kasun Auto-Share', centerId: centers[1].id },
+      ],
+    })
+    ok('probe students added', roster.status === 201 && roster.data.added === 3, roster)
+    const [s1, s2, s3] = roster.data.students
+
+    // A recorded mark sheet → one styled card in the group.
+    const before = readLog().length
+    const sheet = await admin.call('POST', '/api/results/students', {
+      eventId: open.id,
+      scores: [
+        { studentId: s1.id, marks: 55 },
+        { studentId: s2.id, marks: 50 },
+        { studentId: s3.id, marks: 60 },
+      ],
+      notes: 'auto-share student probe',
+    })
+    ok('mark sheet recorded', sheet.status === 201 && Boolean(sheet.data.resultId), sheet)
+    let lines = readLog()
+    const arrived = await waitFor(() => {
+      lines = readLog()
+      return lines.length === before + 1
+    })
+    ok('mark sheet auto-shared', arrived, lines.length - before)
+    const autoMsg = lines[lines.length - 1]
+    ok(
+      'student-result auto-share is the styled event card',
+      autoMsg.kind === 'image' && (autoMsg.caption ?? '').includes('Event result') && (autoMsg.imageBytes ?? 0) > 10_000,
+      autoMsg
+    )
+    ok(
+      'student-result caption carries the guest link to this event',
+      Boolean((autoMsg.caption ?? '').includes(`${BASE}/present/${seeded.id}/event/${open.id}`)),
+      autoMsg.caption
+    )
+
+    // A corrected sheet → a clearly labeled follow-up card.
+    const before2 = readLog().length
+    const fixed = await admin.call('POST', '/api/results/students', {
+      eventId: open.id,
+      scores: [
+        { studentId: s1.id, marks: 55 },
+        { studentId: s2.id, marks: 50 },
+        { studentId: s3.id, marks: 20 },
+      ],
+      reason: 'Auto-share student probe correction',
+    })
+    ok('mark sheet corrected', fixed.status === 200 && fixed.data.isCorrection === true, fixed)
+    const arrived2 = await waitFor(() => {
+      lines = readLog()
+      return lines.length === before2 + 1
+    })
+    ok('mark-sheet correction auto-shared', arrived2, lines.length - before2)
+    const corrMsg = lines[lines.length - 1]
+    ok(
+      'mark-sheet correction labeled on the card',
+      corrMsg.kind === 'image' && (corrMsg.caption ?? '').includes('Corrected result'),
+      corrMsg.caption
+    )
+
+    // Disabled → a mark sheet stays silent (parity with the podium flow).
+    const disable = await admin.call('PUT', '/api/whatsapp/config', { autoEvents: false })
+    ok('auto-share disabled again', disable.data.autoEvents === false, disable.data)
+    const before3 = readLog().length
+    const silent = await admin.call('POST', '/api/results/students', {
+      eventId: open.id,
+      scores: [
+        { studentId: s1.id, marks: 55 },
+        { studentId: s2.id, marks: 50 },
+        { studentId: s3.id, marks: 10 },
+      ],
+      reason: 'Silent mark-sheet probe',
+    })
+    ok('mark sheet recorded with auto-share off', silent.status === 200, silent)
+    await new Promise((r) => setTimeout(r, 1500))
+    ok('no message sent while disabled', readLog().length === before3, readLog().length - before3)
+  }
+
   // ═══ 10. Share-card builder unit checks ═══
   section('10 · Share-card builders (synthetic data)')
   {
