@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Award, GraduationCap, Loader2, Lock, MessageCircle, RotateCcw, Save, Undo2 } from 'lucide-react'
+import { Award, GraduationCap, Loader2, Lock, MessageCircle, RotateCcw, Save, Settings2, Trash2, Undo2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -10,8 +10,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { easeOutExpo, medalText, StatusChip } from '@/components/tournament/ui-bits'
@@ -29,7 +47,9 @@ interface EventDialogProps {
 
 /**
  * Event detail — view, record, correct or reset a single result,
- * with its own revision trail.
+ * with its own revision trail. Admins can also edit the slot
+ * itself (its label and scoring mode) or remove it entirely when
+ * it was created by mistake.
  */
 export function EventDialog({ event, onClose }: EventDialogProps) {
   const { toast } = useToast()
@@ -39,6 +59,8 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
   const submitResult = useAppStore((s) => s.submitResult)
   const resetResult = useAppStore((s) => s.resetResult)
   const setEventStatus = useAppStore((s) => s.setEventStatus)
+  const updateEvent = useAppStore((s) => s.updateEvent)
+  const deleteEvent = useAppStore((s) => s.deleteEvent)
   const sendWhatsApp = useAppStore((s) => s.sendWhatsApp)
   const setAuthDialogOpen = useAppStore((s) => s.setAuthDialogOpen)
 
@@ -49,8 +71,16 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
   }))
   const [reason, setReason] = useState('')
   const [notes, setNotes] = useState(event?.result?.notes ?? '')
-  const [busy, setBusy] = useState<'save' | 'reset' | 'share' | null>(null)
+  const [busy, setBusy] = useState<'save' | 'reset' | 'share' | 'settings' | 'delete' | null>(null)
   const [resetOpen, setResetOpen] = useState(false)
+
+  // ── Slot settings (admins) — initialised fresh per event because
+  // the parent remounts this dialog with key={event.id}.
+  const [settingsLabel, setSettingsLabel] = useState(event?.label ?? '')
+  const [settingsMode, setSettingsMode] = useState<'podium' | 'students'>(
+    event?.scoringMode === 'students' ? 'students' : 'podium'
+  )
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   // NOTE: this dialog is remounted via key={event.id} by the parent,
   // so local state initializes fresh for each opened event.
@@ -102,6 +132,43 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
     podium.first !== (event.result?.firstPlaceCenterId ?? null) ||
     podium.second !== (event.result?.secondPlaceCenterId ?? null) ||
     podium.third !== (event.result?.thirdPlaceCenterId ?? null)
+
+  // Slot settings: the scoring mode is a fact of history once
+  // anything is recorded — it only changes on a clean slot.
+  const hasMarks = studentScoreIds.has(event.id)
+  const modeLocked = Boolean(event.result) || hasMarks
+  const settingsDirty = settingsLabel !== event.label || settingsMode !== event.scoringMode
+
+  const saveSettings = async () => {
+    if (!settingsDirty || busy) return
+    setBusy('settings')
+    const out = await updateEvent(event.id, {
+      ...(settingsLabel.trim() && settingsLabel.trim() !== event.label ? { label: settingsLabel.trim() } : {}),
+      ...(settingsMode !== event.scoringMode ? { scoringMode: settingsMode } : {}),
+    })
+    setBusy(null)
+    if (out.ok) {
+      toast({ title: 'Event updated', description: event.label })
+    } else {
+      toast({ title: 'Could not update the event', description: out.error, variant: 'destructive' })
+    }
+  }
+
+  const doDelete = async () => {
+    setBusy('delete')
+    const out = await deleteEvent(event.id)
+    setBusy(null)
+    setDeleteOpen(false)
+    if (out.ok) {
+      toast({
+        title: 'Event removed',
+        description: `${event.label} — standings and progress recomputed without it.`,
+      })
+      onClose()
+    } else {
+      toast({ title: 'Could not remove the event', description: out.error, variant: 'destructive' })
+    }
+  }
 
   const save = async () => {
     if (!session) return
@@ -173,6 +240,71 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
         </DialogHeader>
 
         <div className="space-y-5">
+          {/* Slot settings (admins) — relabel, re-score, remove. The
+              scoring mode locks the moment anything is recorded. */}
+          {session && isAdmin ? (
+            <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <Settings2 className="h-3.5 w-3.5" aria-hidden /> Event settings
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs text-destructive hover:text-destructive"
+                  onClick={() => setDeleteOpen(true)}
+                  disabled={busy !== null}
+                  title="Remove this slot and everything recorded on it"
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden /> Remove…
+                </Button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="me-label" className="text-xs text-muted-foreground">Label</Label>
+                  <Input
+                    id="me-label"
+                    value={settingsLabel}
+                    onChange={(e) => setSettingsLabel(e.target.value)}
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Scoring mode</Label>
+                  <Select value={settingsMode} onValueChange={(v) => setSettingsMode(v === 'students' ? 'students' : 'podium')} disabled={modeLocked}>
+                    <SelectTrigger className="w-full" aria-label="Scoring mode">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="podium">Center podium</SelectItem>
+                      <SelectItem value="students">Student marks</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {modeLocked ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      Locked while a result is recorded — reset it first to switch.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => void saveSettings()}
+                  disabled={busy !== null || !settingsDirty || !settingsLabel.trim()}
+                >
+                  {busy === 'settings' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  ) : (
+                    <Save className="h-4 w-4" aria-hidden />
+                  )}
+                  Save changes
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
           {/* Status control */}
           {session ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -456,6 +588,39 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
           ) : null}
         </div>
       </DialogContent>
+
+      {/* Remove slot confirm — the cascade is the whole point of
+          the warning: a recorded result (and any student marks) go
+          with the slot, and the standings recompute immediately. */}
+      <AlertDialog open={deleteOpen} onOpenChange={(o) => !busy && setDeleteOpen(o)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this event slot?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {event.result || hasMarks
+                ? `It holds a recorded result${hasMarks ? ' and student marks' : ''} — removing it deletes them, and the standings and progress recompute immediately.`
+                : 'It has no recorded result. It will disappear from the matrix and the scoring console.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep event</AlertDialogCancel>
+            <AlertDialogAction
+              className="gap-1.5 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault()
+                void doDelete()
+              }}
+            >
+              {busy === 'delete' ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Trash2 className="h-4 w-4" aria-hidden />
+              )}
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   )
 }

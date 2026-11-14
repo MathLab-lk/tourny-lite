@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, Loader2, Link2, MessageCircle, Presentation, Printer } from 'lucide-react'
+import { Check, Loader2, Link2, MessageCircle, Plus, Presentation, Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store/app-store'
 import { useToast } from '@/hooks/use-toast'
 import { EventDialog } from '@/components/tournament/event-dialog'
+import { AddEventDialog } from '@/components/tournament/add-event-dialog'
 import { AuditRow } from '@/components/tournament/manage/audit-row'
 import {
   EmptyState,
@@ -42,6 +43,7 @@ export function OverviewView() {
   const sendWhatsApp = useAppStore((s) => s.sendWhatsApp)
 
   const [selectedEvent, setSelectedEvent] = useState<EventDTO | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [linkCopied, setLinkCopied] = useState(false)
 
@@ -206,6 +208,17 @@ export function OverviewView() {
         <div className="mb-2.5 flex items-center justify-between">
           <h2 className="text-sm font-semibold">Events</h2>
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+            {isAdmin ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs"
+                onClick={() => setAddOpen(true)}
+                title="Append event slots — under an existing or a brand-new category and game"
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden /> Add
+              </Button>
+            ) : null}
             {(['pending', 'in_progress', 'completed'] as const).map((st) => (
               <span key={st} className="flex items-center gap-1.5">
                 <span className={cn('h-2 w-2 rounded-full', eventStatusMeta(st).dot)} aria-hidden />
@@ -322,6 +335,7 @@ export function OverviewView() {
       </motion.div>
 
       <EventDialog key={liveSelectedEvent?.id ?? 'none'} event={liveSelectedEvent} onClose={() => setSelectedEvent(null)} />
+      <AddEventDialog open={addOpen} onOpenChange={setAddOpen} />
     </motion.div>
   )
 }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Award, ChevronRight, Crown, Expand, Medal, Trophy, Wifi, WifiOff } from 'lucide-react'
 import { AnimatedNumber } from '@/components/tournament/ui-bits'
+import { RankingsModeToggle, StudentRankingsStage, type RankingsMode } from '@/components/tournament/student-rankings-stage'
 import { cn } from '@/lib/utils'
 import type { TournamentDetailDTO } from '@/lib/types'
 
@@ -12,13 +13,16 @@ import type { TournamentDetailDTO } from '@/lib/types'
  * presentation. No sign-in, no chrome: open the shared link from
  * WhatsApp and watch. Standings arrive over the same SSE stream the
  * staff app uses and reorder live; on phones the leaderboard table
- * becomes stacked result cards.
+ * becomes stacked result cards. Guests can switch between the
+ * center standings and the student ranking stage — the same two
+ * acts the projector shows.
  */
 export function PresentBoard({ id }: { id: string }) {
   const [detail, setDetail] = useState<TournamentDetailDTO | null>(null)
   const [connected, setConnected] = useState(false)
   const [gone, setGone] = useState(false)
   const [updatedAt, setUpdatedAt] = useState<number | null>(null)
+  const [mode, setMode] = useState<RankingsMode>('centers')
 
   useEffect(() => {
     let es: EventSource | null = null
@@ -73,6 +77,8 @@ export function PresentBoard({ id }: { id: string }) {
   const tournament = detail?.tournament
   const standings = detail?.standings ?? []
   const progress = detail?.progress
+  const studentStandings = detail?.studentStandings ?? []
+  const hasStudents = (detail?.students.length ?? 0) > 0
 
   const goFullscreen = () => {
     if (typeof document === 'undefined') return
@@ -266,6 +272,38 @@ export function PresentBoard({ id }: { id: string }) {
               ) : null}
             </AnimatePresence>
 
+            {/* Act switch — center standings or the student ranking
+                stage. Only offered when the tournament actually
+                tracks students. */}
+            {hasStudents ? (
+              <div className="mt-9 flex justify-center">
+                <RankingsModeToggle mode={mode} onChange={setMode} />
+              </div>
+            ) : null}
+
+            {mode === 'students' ? (
+              /* The student ranking — awards-ceremony podium reveal,
+                 then the live field. */
+              <div className="mt-6">
+                <div className="mb-3 flex items-center justify-between px-1">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-[0.3em] text-zinc-500">
+                    Student ranking
+                  </h2>
+                  {updatedAt ? (
+                    <span className="text-[11px] tabular-nums text-zinc-500">
+                      Updated{' '}
+                      {new Date(updatedAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                      })}
+                    </span>
+                  ) : null}
+                </div>
+                <StudentRankingsStage rows={studentStandings} />
+              </div>
+            ) : (
+            <>
             {/* Leaderboard — table on screens, stacked cards on phones.
                 The section label says what this page is (the overall
                 standings, not one event) before a single row is read. */}
@@ -418,13 +456,17 @@ export function PresentBoard({ id }: { id: string }) {
               </motion.div>
               </div>
             </div>
+            </>
+            )}
 
             {/* Footer meta */}
             <p className="mt-5 flex flex-wrap items-center justify-center gap-3 text-[11px] text-zinc-500">
-              <span className="flex items-center gap-1.5">
-                <Trophy className="h-3.5 w-3.5" aria-hidden />
-                Tie-break order: total, then first, second and third places
-              </span>
+              {mode === 'centers' ? (
+                <span className="flex items-center gap-1.5">
+                  <Trophy className="h-3.5 w-3.5" aria-hidden />
+                  Tie-break order: total, then first, second and third places
+                </span>
+              ) : null}
             </p>
             <p className="mt-3 text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-zinc-600">
               Tourny Lite

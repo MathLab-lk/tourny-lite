@@ -162,11 +162,3 @@ export async function resetResult(eventId: string, reason: string, actor: string
 
   emitTournamentChanged(result.tournamentId)
 }
-
-/** Manual event status override from the M&E console. */
-export async function setEventStatus(eventId: string, status: 'pending' | 'in_progress' | 'completed') {
-  const event = await db.tournamentEvent.findUnique({ where: { id: eventId } })
-  if (!event) throw new Error('Event not found')
-  await db.tournamentEvent.update({ where: { id: eventId }, data: { status } })
-  emitTournamentChanged(event.tournamentId)
-}

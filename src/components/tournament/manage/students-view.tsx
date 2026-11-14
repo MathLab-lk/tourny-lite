@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, Loader2, Pencil, Plus, Trash2, TriangleAlert } from 'lucide-react'
+import { Check, Loader2, Pencil, Plus, Printer, Trash2, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -64,6 +64,7 @@ export function StudentsView() {
   const addStudents = useAppStore((s) => s.addStudents)
   const updateStudent = useAppStore((s) => s.updateStudent)
   const removeStudent = useAppStore((s) => s.removeStudent)
+  const printSheet = useAppStore((s) => s.printSheet)
 
   const [ newName, setNewName ] = useState('')
   const [ newCenterId, setNewCenterId ] = useState<string>(NO_CENTER)
@@ -166,6 +167,17 @@ export function StudentsView() {
       <PageHeader
         title="Students"
         meta={`${students.length} registered · ${scoredStudents.length} scored · ranking updates live`}
+        actions={
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5"
+            onClick={() => printSheet('students')}
+            title="Print the student ranking sheet (A4)"
+          >
+            <Printer className="h-4 w-4" aria-hidden /> Print
+          </Button>
+        }
       />
 
       {/* Add student (any signed-in staff — the roster is built in the field) */}

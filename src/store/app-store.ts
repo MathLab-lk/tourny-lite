@@ -24,7 +24,7 @@ export type View =
   | 'students'
   | 'history'
   | 'settings'
-export type PrintMode = 'progress' | null
+export type PrintMode = 'progress' | 'students' | null
 
 const queueKey = (tid: string) => `tourny_lite_queue_${tid}`
 
@@ -162,6 +162,22 @@ interface AppState {
   removeStudent: (studentId: string) => Promise<{ ok: boolean; error?: string }>
   resetResult: (eventId: string, reason: string) => Promise<boolean>
   setEventStatus: (eventId: string, status: string) => Promise<boolean>
+  /** Adds event slots (and optionally a new category/game inline). */
+  addEvents: (input: {
+    divisionId?: string
+    newDivision?: { code: string; name: string; ageRange?: string; gradeRange?: string }
+    gameId?: string
+    newGame?: { englishName: string; sinhalaName?: string; rulesSummary?: string }
+    count?: number
+    scoringMode?: 'podium' | 'students'
+  }) => Promise<{ ok: boolean; added?: number; error?: string }>
+  /** Edits an event slot: label, scoring mode (clean slots only) or status. */
+  updateEvent: (
+    eventId: string,
+    patch: { label?: string; scoringMode?: 'podium' | 'students'; status?: string }
+  ) => Promise<{ ok: boolean; error?: string }>
+  /** Removes an event slot and everything recorded on it. */
+  deleteEvent: (eventId: string) => Promise<{ ok: boolean; error?: string }>
   sendWhatsApp: (
     kind: 'test' | 'standings' | 'event',
     opts?: { tournamentId?: string; eventId?: string }
@@ -669,6 +685,43 @@ export const useAppStore = create<AppState>((set, get) => ({
       return true
     } catch {
       return false
+    }
+  },
+
+  // ── Event slot management (admin) ───────────────────────
+
+  addEvents: async (input) => {
+    const tid = get().activeTournamentId
+    if (!tid) return { ok: false, error: 'No tournament selected' }
+    try {
+      const out = await api<{ added: number }>(`/api/tournaments/${tid}/events`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+      await Promise.all([get().refreshActive(), get().loadTournaments()])
+      return { ok: true, added: out.added }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'The events could not be added.' }
+    }
+  },
+
+  updateEvent: async (eventId, patch) => {
+    try {
+      await api(`/api/events/${eventId}`, { method: 'PATCH', body: JSON.stringify(patch) })
+      await get().refreshActive()
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'The event could not be updated.' }
+    }
+  },
+
+  deleteEvent: async (eventId) => {
+    try {
+      await api(`/api/events/${eventId}`, { method: 'DELETE' })
+      await Promise.all([get().refreshActive(), get().loadTournaments()])
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'The event could not be removed.' }
     }
   },
 

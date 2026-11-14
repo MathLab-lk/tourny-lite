@@ -1,18 +1,20 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Award,
   Crown,
   Expand,
   Medal,
+  Printer,
   Trophy,
   Wifi,
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AnimatedNumber } from '@/components/tournament/ui-bits'
+import { RankingsModeToggle, StudentRankingsStage, type RankingsMode } from '@/components/tournament/student-rankings-stage'
 import { useAppStore } from '@/store/app-store'
 import { cn } from '@/lib/utils'
 
@@ -21,6 +23,9 @@ import { cn } from '@/lib/utils'
  * gold / silver / bronze rank accents, staggered 3D entrance,
  * count-up totals and a layered atmosphere. Presented modally on
  * top of the app; closing it returns to the presenter's context.
+ * Two acts on the same stage: the center standings table, and —
+ * when the tournament scores students — the student ranking with
+ * its awards-ceremony podium reveal.
  */
 export function ScoreboardView() {
   const detail = useAppStore((s) => s.detail)
@@ -28,10 +33,15 @@ export function ScoreboardView() {
   const sseConnected = useAppStore((s) => s.sseConnected)
   const lastUpdated = useAppStore((s) => s.lastUpdated)
   const closeScoreboard = useAppStore((s) => s.closeScoreboard)
+  const printSheet = useAppStore((s) => s.printSheet)
+
+  const [mode, setMode] = useState<RankingsMode>('centers')
 
   const tournament = detail?.tournament
   const standings = detail?.standings ?? []
   const progress = detail?.progress
+  const studentStandings = detail?.studentStandings ?? []
+  const hasStudents = (detail?.students.length ?? 0) > 0
 
   // Escape dismisses the presentation, like any modal.
   useEffect(() => {
@@ -92,6 +102,17 @@ export function ScoreboardView() {
         <Button size="sm" variant="ghost" className="gap-1.5 text-zinc-300 hover:bg-zinc-800 hover:text-white" onClick={goFullscreen}>
           <Expand className="h-4 w-4" aria-hidden /> Fullscreen
         </Button>
+        {mode === 'students' ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="gap-1.5 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+            onClick={() => printSheet('students')}
+            title="Print the student ranking sheet"
+          >
+            <Printer className="h-4 w-4" aria-hidden /> Print
+          </Button>
+        ) : null}
         <Button
           size="sm"
           variant="ghost"
@@ -157,6 +178,21 @@ export function ScoreboardView() {
           </div>
         ) : null}
 
+        {/* Act switch — center standings or the student ranking
+            stage. Only offered when the tournament actually tracks
+            students. */}
+        {hasStudents ? (
+          <div className="mt-8 flex justify-center">
+            <RankingsModeToggle mode={mode} onChange={setMode} />
+          </div>
+        ) : null}
+
+        {mode === 'students' ? (
+          /* The student ranking — awards-ceremony podium reveal,
+             then the live field. */
+          <StudentRankingsStage rows={studentStandings} className="mt-6" />
+        ) : (
+        <>
         {/* Leaderboard — 3D stage entrance */}
         <div className="mt-8 [perspective:1400px]">
           <motion.div
@@ -237,13 +273,17 @@ export function ScoreboardView() {
             </table>
           </motion.div>
         </div>
+        </>
+        )}
 
         {/* Footer meta */}
         <p className="mt-5 flex flex-wrap items-center justify-center gap-3 text-[11px] text-zinc-500">
-          <span className="flex items-center gap-1.5">
-            <Trophy className="h-3.5 w-3.5" aria-hidden />
-            Tie-break order: total, then first, second and third places
-          </span>
+          {mode === 'centers' ? (
+            <span className="flex items-center gap-1.5">
+              <Trophy className="h-3.5 w-3.5" aria-hidden />
+              Tie-break order: total, then first, second and third places
+            </span>
+          ) : null}
           {lastUpdated ? (
             <>
               <span aria-hidden>·</span>

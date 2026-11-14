@@ -78,9 +78,29 @@ A standalone, public live scoreboard for the people watching from the
 outside: no sign-in, no app chrome — open the link and watch. Standings
 arrive over the same Server-Sent Events stream the staff app uses and
 reorder live; on phones the leaderboard becomes stacked result cards,
-and the latest recorded podium shows as a *Latest result* strip. Grab the
+and the latest recorded podium shows as a *Latest result* strip. When
+the tournament tracks students, guests get the same two acts the
+projector shows: a **Centers / Students** switch flips the page between
+the standings table and the student ranking stage. Grab the
 link with **Guest link** on the Overview (or from *Settings → WhatsApp
 sharing*).
+
+### Events — the matrix is editable
+
+The event matrix was the plan, not a cage: **Add** (next to *Events* on
+the Overview, administrators) appends slots to a live tournament —
+under an existing category and game, or under **brand-new ones created
+right in the dialog** (the game the plan missed, the extra round the
+field asks for). Each batch of slots picks its scoring mode up front
+(center podium or per-student marks) and numbers itself after whatever
+already exists (e.g. *slots 3–4*).
+
+From any event's dialog, administrators can also **rename the slot**,
+**switch its scoring mode** (only while it is clean — a recorded result
+or mark sheet locks the mode until it is reset) and **remove the slot**
+entirely; removal cascades its result, marks and audit trail, and the
+standings and progress recompute immediately. Status changes remain
+open to every signed-in staff member.
 
 ### Centers
 
@@ -111,7 +131,16 @@ console shows both tabs (*Center podium* / *Student marks*).
   usual fixed points (75/50/25 by default). The preview updates live as
   you type. Ties on sums break by center code.
 - **Student ranking** — the Students view ranks every competitor by total
-  marks (tie-break: events contested, then best single mark), live.
+  marks (tie-break: events contested, then best single mark), live. The
+  same ranking is a **presentation act**: the in-app scoreboard
+  (*Present*) and the public guest scoreboard both offer a Centers /
+  Students switch, and the student view is an awards stage — bronze,
+  silver and champion cards rise onto a spotlighted podium (stacked
+  1st → 2nd → 3rd on phones), with the rest of the field gliding into
+  place live as marks land. A **Print** button (Students view, and the
+  scoreboard's student mode) produces an A4 *Student Ranking Sheet* —
+  every student with rank, center, events, best mark and total,
+  same-name students disambiguated by their short id.
 - **Same guardrails** — correcting a mark sheet requires a justification
   and lands in the audit trail; reassigning or removing a student with
   recorded marks re-derives every affected event automatically; resetting
@@ -230,6 +259,7 @@ With the dev server running:
 ```bash
 bun run scripts/battle-test.ts          # core suite (a few assertions are state-dependent)
 bun run scripts/student-test.ts         # student rankings suite (roster, mark sheets, derivation)
+bun run scripts/event-edit-probe.ts     # event slot editing suite (add/rename/re-score/remove)
 bun run scripts/waha-mock.ts 3001 &     # mock WAHA server
 BASE_URL=http://localhost:3000 bun run scripts/whatsapp-test.ts
 ```
@@ -252,6 +282,14 @@ its ordering, corrections with mandatory justification (audit-trailed),
 the manual-podium lockout on student events, automatic re-derivation
 after reassignment and removal, reset (clearing the mark sheet) and a
 classic-podium regression pass.
+
+The event-edit suite (36 assertions) covers the editable matrix:
+appending slots to an existing category/game pair (numbering, scoring
+mode, judge lockout), inline creation of a brand-new category and game
+(duplicate-code rejection), renaming slots (admin-only), the scoring
+mode lock while a result or mark sheet exists, judge access to status
+changes, student standings and the derived podium, and slot removal
+(cascade + progress recompute).
 
 The WhatsApp suite (100 assertions) covers access control on every
 endpoint, config save/masking, session + group discovery, all three
