@@ -315,7 +315,10 @@ async function main() {
       thirdPlaceCenterId: c2,
       recordedBy: 'x',
     })
-    ok('rejects a center in two places', dup.status === 400, dup)
+    ok('a center may take two podium places (dominant sweep)', dup.status === 201, dup)
+    const swept = await guest.call('GET', `/api/tournaments/${tournamentId}`)
+    const sweptRow = swept.data.standings.find((r: any) => r.centerId === c1)
+    ok('the sweep pays both places (75 + 50)', sweptRow?.total === 125 && sweptRow?.gold === 1 && sweptRow?.silver === 1, sweptRow)
 
     const foreign = await judge.call('POST', '/api/results', {
       eventId: resultEventId,
@@ -335,7 +338,9 @@ async function main() {
     })
     ok('rejects unknown event with 404', invalidEvent.status === 404, invalidEvent)
 
-    // Spoofing attempt: client sends a fake recordedBy
+    // Spoofing attempt: client sends a fake recordedBy — also the
+    // correction that replaces the sweep above with the official
+    // podium, so the standings assertions below see one medal each.
     const good = await judge.call('POST', '/api/results', {
       eventId: resultEventId,
       firstPlaceCenterId: c1,
@@ -343,8 +348,9 @@ async function main() {
       thirdPlaceCenterId: c3,
       recordedBy: 'Mallory The Spoofer',
       notes: 'battle test entry',
+      reason: 'Replacing the sweep with the official podium',
     })
-    ok('records a valid result', good.status === 201, good)
+    ok('records a valid result (correcting the sweep)', good.status === 200, good)
 
     const after = await guest.call('GET', `/api/tournaments/${tournamentId}`)
     const recorded = after.data.events.find((e: any) => e.id === resultEventId)

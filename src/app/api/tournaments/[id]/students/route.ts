@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { addStudents, removeStudent, updateStudent } from '@/lib/student-service'
+import { backfillStudentCodes, registerStudents, removeStudent, updateStudent } from '@/lib/student-service'
 import { emitTournamentChanged } from '@/lib/bus'
 import { friendlyError, requireRole } from '@/lib/auth'
 import type { StudentInput } from '@/lib/types'
@@ -7,12 +7,14 @@ import type { StudentInput } from '@/lib/types'
 type Ctx = { params: Promise<{ id: string }> }
 
 /**
- * Students — the on-the-go roster behind the student rankings.
+ * Students — the registration stage behind the student rankings.
  *
- *  - POST   any signed-in staff: scorekeepers meet unregistered
- *           students in the field, so adding to the roster is a
- *           field action (name + optional center).
- *  - PATCH  administrator: rename or reassign a student's center.
+ *  - POST   any signed-in staff: register students (name + center
+ *           + grade as the ID pattern needs). Each registration
+ *           issues a unique studentCode from the tournament's ID
+ *           pattern — the field reference for marks.
+ *  - PATCH  administrator: rename, re-grade or reassign a student's
+ *           center. Codes are stable and never regenerate.
  *  - DELETE administrator: remove a student (and their marks).
  */
 export async function POST(req: NextRequest, ctx: Ctx) {
@@ -22,19 +24,24 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
   try {
     const body = await req.json()
-    const inputs: StudentInput[] = Array.isArray(body.students)
+    const raw: StudentInput[] = Array.isArray(body.students)
       ? body.students
       : body.name !== undefined
-        ? [{ name: body.name, centerId: body.centerId ?? null }]
+        ? [{ name: body.name, centerId: body.centerId ?? null, grade: body.grade ?? '' }]
         : []
-    if (inputs.length === 0) {
+    const inputs = raw.map((s) => ({
+      name: String(s.name ?? ''),
+      centerId: s.centerId ?? null,
+      grade: s.grade ?? '',
+    }))
+    if (inputs.length === 0 || inputs.every((s) => !s.name.trim())) {
       return NextResponse.json({ error: 'No student names provided' }, { status: 400 })
     }
-    const students = await addStudents(id, inputs)
+    const students = await registerStudents(id, inputs)
     emitTournamentChanged(id)
     return NextResponse.json({ added: students.length, students }, { status: 201 })
   } catch (err) {
-    const { message, status } = friendlyError(err, 'Failed to add students')
+    const { message, status } = friendlyError(err, 'Failed to register students')
     return NextResponse.json({ error: message }, { status })
   }
 }
@@ -49,8 +56,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     const body = await req.json()
     if (!body.studentId) return NextResponse.json({ error: 'studentId required' }, { status: 400 })
 
-    const patch: { name?: string; centerId?: string | null } = {}
+    const patch: { name?: string; centerId?: string | null; grade?: string | null } = {}
     if (body.name !== undefined) patch.name = String(body.name)
+    if (body.grade !== undefined) patch.grade = body.grade === null ? null : String(body.grade)
     if (body.centerId !== undefined) patch.centerId = body.centerId === null ? null : String(body.centerId)
 
     if (Object.keys(patch).length === 0) {

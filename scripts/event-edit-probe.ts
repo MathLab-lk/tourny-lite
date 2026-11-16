@@ -174,24 +174,23 @@ async function main() {
 
   section('6 · Student marks + standings (for the stage)')
   {
+    // Registration issues IDs — the default pattern needs center +
+    // grade, so look the centers up first.
+    const before = await admin.call('GET', `/api/tournaments/${tid}`)
+    const centersBefore: any[] = before.data.centers
     const addStudents = await admin.call('POST', `/api/tournaments/${tid}/students`, {
       students: [
-        { name: 'Amara Silva', centerId: null },
-        { name: 'Amara Silva', centerId: null },
-        { name: 'Nimal Fernando', centerId: null },
+        { name: 'Amara Silva', centerId: centersBefore[0]?.id ?? null, grade: '6' },
+        { name: 'Amara Silva', centerId: centersBefore[1]?.id ?? null, grade: '6' },
+        { name: 'Nimal Fernando', centerId: centersBefore[2]?.id ?? null, grade: '6' },
       ],
     })
-    ok('students added (same-name disambiguation)', addStudents.status === 200 || addStudents.status === 201, addStudents)
+    ok('students registered (same-name disambiguation via issued IDs)', addStudents.status === 200 || addStudents.status === 201, addStudents)
 
     const detail = await admin.call('GET', `/api/tournaments/${tid}`)
     const students = detail.data.students
     ok('3 students registered', students.length === 3, students.length)
-    const centers = detail.data.centers
-    // Assign centers (studentId rides in the body, not the path)
-    const a1 = await admin.call('PATCH', `/api/tournaments/${tid}/students`, { studentId: students[0].id, centerId: centers[0].id })
-    const a2 = await admin.call('PATCH', `/api/tournaments/${tid}/students`, { studentId: students[1].id, centerId: centers[1].id })
-    const a3 = await admin.call('PATCH', `/api/tournaments/${tid}/students`, { studentId: students[2].id, centerId: centers[2].id })
-    ok('centers assigned', a1.status === 200 && a2.status === 200 && a3.status === 200, [a1, a2, a3])
+    ok('every student carries an issued ID', students.every((s: any) => typeof s.studentCode === 'string' && s.studentCode.length > 0), students.map((s: any) => s.studentCode))
 
     // Record marks on the student-mode slot (slot 2)
     const slot2 = detail.data.events.find((e: any) => e.subEventIndex === 2)

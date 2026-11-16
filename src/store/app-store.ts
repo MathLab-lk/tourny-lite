@@ -10,6 +10,7 @@ import type {
   InviteDTO,
   ResultSubmitPayload,
   SessionUserDTO,
+  StudentDTO,
   StudentInput,
   StudentScoresSubmitPayload,
   TournamentDetailDTO,
@@ -19,7 +20,6 @@ import type {
 export type View =
   | 'home'
   | 'overview'
-  | 'scoring'
   | 'centers'
   | 'students'
   | 'history'
@@ -154,10 +154,11 @@ interface AppState {
   submitStudentScores: (
     payload: StudentScoresSubmitPayload
   ) => Promise<{ ok: boolean; queued: boolean; error?: string }>
-  addStudents: (inputs: StudentInput[]) => Promise<{ ok: boolean; error?: string }>
+  registerStudents: (inputs: StudentInput[]) => Promise<{ ok: boolean; students?: StudentDTO[]; error?: string }>
+  backfillStudentCodes: () => Promise<{ ok: boolean; issued?: number; error?: string }>
   updateStudent: (
     studentId: string,
-    patch: { name?: string; centerId?: string | null }
+    patch: { name?: string; centerId?: string | null; grade?: string | null }
   ) => Promise<{ ok: boolean; error?: string }>
   removeStudent: (studentId: string) => Promise<{ ok: boolean; error?: string }>
   resetResult: (eventId: string, reason: string) => Promise<boolean>
@@ -610,22 +611,44 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // ── Students (roster + rankings) ──────────────────────
+  // ── Students (registration + rankings) ─────────────
 
-  addStudents: async (inputs) => {
+  registerStudents: async (inputs) => {
     const tid = get().activeTournamentId
     if (!tid) return { ok: false, error: 'No tournament selected' }
     try {
-      await api(`/api/tournaments/${tid}/students`, {
-        method: 'POST',
-        body: JSON.stringify({ students: inputs }),
-      })
+      const out = await api<{ added: number; students: StudentDTO[] }>(
+        `/api/tournaments/${tid}/students`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ students: inputs }),
+        }
+      )
       await Promise.all([get().refreshActive(), get().loadTournaments()])
-      return { ok: true }
+      return { ok: true, students: out.students }
     } catch (err) {
       return {
         ok: false,
-        error: err instanceof Error ? err.message : 'Could not add the students',
+        error: err instanceof Error ? err.message : 'Could not register the students',
+      }
+    }
+  },
+
+  /** Issues IDs to legacy students registered before the
+   *  registration stage existed (admin only). */
+  backfillStudentCodes: async () => {
+    const tid = get().activeTournamentId
+    if (!tid) return { ok: false, error: 'No tournament selected' }
+    try {
+      const out = await api<{ issued: number }>(`/api/tournaments/${tid}/students/backfill`, {
+        method: 'POST',
+      })
+      await get().refreshActive()
+      return { ok: true, issued: out.issued }
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Could not generate the missing IDs',
       }
     }
   },

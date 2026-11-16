@@ -214,14 +214,14 @@ async function main() {
   {
     const added = await admin.call('POST', `/api/tournaments/${tid}/students`, {
       students: [
-        { name: 'Amara Silva', centerId: c501.id },
-        { name: 'Nimal Fernando', centerId: c501.id },
-        { name: 'Kasun Perera', centerId: c502.id },
-        { name: 'Dilini Rajapaksa', centerId: c502.id },
-        { name: 'Tharindu Dias', centerId: c503.id },
+        { name: 'Amara Silva', centerId: c501.id, grade: '6' },
+        { name: 'Nimal Fernando', centerId: c501.id, grade: '6' },
+        { name: 'Kasun Perera', centerId: c502.id, grade: '6' },
+        { name: 'Dilini Rajapaksa', centerId: c502.id, grade: '6' },
+        { name: 'Tharindu Dias', centerId: c503.id, grade: '6' },
       ],
     })
-    ok('adds a roster', added.status === 201, added)
+    ok('registers a roster (with issued IDs)', added.status === 201, added)
     students = added.data?.students ?? []
 
     const sheet = await admin.call('POST', '/api/results/students', {

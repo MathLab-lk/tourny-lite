@@ -2,7 +2,17 @@
 
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, Loader2, Pencil, Plus, Printer, Trash2, TriangleAlert } from 'lucide-react'
+import {
+  BadgeCheck,
+  Check,
+  Loader2,
+  Pencil,
+  Plus,
+  Printer,
+  Sparkles,
+  Trash2,
+  TriangleAlert,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -42,18 +52,21 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { AnimatedNumber, EmptyState, PageHeader, easeOutExpo, medalText } from '@/components/tournament/ui-bits'
 import { useAppStore } from '@/store/app-store'
-import { studentShortId } from '@/lib/student-math'
+import { nextIndexInScope, renderStudentCode, studentShortId } from '@/lib/student-math'
 import { cn } from '@/lib/utils'
 import type { StudentStandingRow } from '@/lib/types'
 
 const NO_CENTER = '__none__'
 
 /**
- * Students — the on-the-go roster and the student ranking, side by
- * side in one table (the Centers pattern). Students are identified
- * by name in the field; the internal id only surfaces as a short
- * suffix when two students share a name, so they can never be
- * confused. Marks are entered per event from the Scoring console.
+ * Students — the registration stage and the student ranking, side by
+ * side in one table (the Centers pattern). Every registration issues
+ * a unique student ID composed from the tournament's ID pattern
+ * (Settings → Student IDs, e.g. {center}-{grade}-{index} →
+ * "402-8-07"): name + center + grade go in, the field reference
+ * comes out. Marks are entered per event from the Overview matrix —
+ * students are picked by their issued ID, so two students who share
+ * a name can never be confused.
  */
 export function StudentsView() {
   const { toast } = useToast()
@@ -61,35 +74,57 @@ export function StudentsView() {
   const loading = useAppStore((s) => s.loadingDetail)
   const session = useAppStore((s) => s.session)
   const isAdmin = session?.role === 'admin'
-  const addStudents = useAppStore((s) => s.addStudents)
+  const registerStudents = useAppStore((s) => s.registerStudents)
+  const backfillStudentCodes = useAppStore((s) => s.backfillStudentCodes)
   const updateStudent = useAppStore((s) => s.updateStudent)
   const removeStudent = useAppStore((s) => s.removeStudent)
   const printSheet = useAppStore((s) => s.printSheet)
 
-  const [ newName, setNewName ] = useState('')
-  const [ newCenterId, setNewCenterId ] = useState<string>(NO_CENTER)
-  const [ adding, setAdding ] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newCenterId, setNewCenterId] = useState<string>(NO_CENTER)
+  const [newGrade, setNewGrade] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [backfilling, setBackfilling] = useState(false)
 
-  const [ editTarget, setEditTarget ] = useState<StudentStandingRow | null>(null)
-  const [ editName, setEditName ] = useState('')
-  const [ editCenterId, setEditCenterId ] = useState<string>(NO_CENTER)
-  const [ saving, setSaving ] = useState(false)
+  const [editTarget, setEditTarget] = useState<StudentStandingRow | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editGrade, setEditGrade] = useState('')
+  const [editCenterId, setEditCenterId] = useState<string>(NO_CENTER)
+  const [saving, setSaving] = useState(false)
 
-  const [ removeTarget, setRemoveTarget ] = useState<StudentStandingRow | null>(null)
-  const [ removing, setRemoving ] = useState(false)
+  const [removeTarget, setRemoveTarget] = useState<StudentStandingRow | null>(null)
+  const [removing, setRemoving] = useState(false)
 
-  // Names that exist more than once — their rows carry the short
-  // internal id so scorekeepers can tell the two apart.
-  const duplicateNames = useMemo(() => {
-    if (!detail) return new Set<string>()
-    const seen = new Map<string, number>()
-    for (const s of detail.students) seen.set(s.name, (seen.get(s.name) ?? 0) + 1)
-    return new Set([...seen.entries()].filter(([, n]) => n > 1).map(([name]) => name))
-  }, [detail])
+  const pattern = detail?.tournament.studentIdPattern ?? '{center}-{grade}-{index}'
+  const needsCenter = pattern.includes('{center}')
+  const needsGrade = pattern.includes('{grade}')
+
+  // Live preview of the NEXT ID the current form inputs will issue.
+  // The server is the source of truth (it re-checks against the
+  // freshest roster and bumps on collisions); this is a close
+  // estimate against the loaded roster.
+  const previewCode = useMemo(() => {
+    if (!detail) return null
+    const roster = detail.students.map((s) => ({
+      studentCode: s.studentCode,
+      centerId: s.centerId,
+      grade: s.grade,
+    }))
+    const centerId = newCenterId === NO_CENTER ? null : newCenterId
+    const centerCode =
+      centerId != null ? detail.centers.find((c) => c.id === centerId)?.centerCode ?? null : null
+    const index = nextIndexInScope(pattern, roster, { centerId, grade: newGrade.trim() })
+    return renderStudentCode(pattern, {
+      name: newName.trim() || 'New Student',
+      centerCode,
+      grade: newGrade.trim(),
+      index,
+    })
+  }, [detail, pattern, newCenterId, newGrade, newName])
 
   if (loading && !detail) {
     return (
-      <div className="mx-auto w-full max-w-4xl px-4 pt-6 sm:px-6">
+      <div className="mx-auto w-full max-w-5xl px-4 pt-6 sm:px-6">
         <div className="h-8 w-40 animate-pulse rounded bg-muted" />
         <div className="mt-6 h-64 animate-pulse rounded-lg bg-muted" />
       </div>
@@ -98,7 +133,7 @@ export function StudentsView() {
 
   if (!detail) {
     return (
-      <div className="mx-auto w-full max-w-4xl px-4 pt-10 sm:px-6">
+      <div className="mx-auto w-full max-w-5xl px-4 pt-10 sm:px-6">
         <EmptyState title="No tournament selected" hint="Choose a tournament to get started." />
       </div>
     )
@@ -106,25 +141,60 @@ export function StudentsView() {
 
   const { centers, students, studentStandings } = detail
   const unassigned = students.filter((s) => !s.centerId)
+  const uncoded = students.filter((s) => !s.studentCode)
   const scoredStudents = studentStandings.filter((s) => s.events > 0)
 
-  const doAdd = async () => {
+  const missingCenterForRegistration = needsCenter && newCenterId === NO_CENTER
+  const missingGradeForRegistration = needsGrade && !newGrade.trim()
+
+  const doRegister = async () => {
     const name = newName.trim()
     if (!name) return
     setAdding(true)
-    const out = await addStudents([{ name, centerId: newCenterId === NO_CENTER ? null : newCenterId }])
+    const out = await registerStudents([
+      {
+        name,
+        centerId: newCenterId === NO_CENTER ? null : newCenterId,
+        grade: newGrade.trim(),
+      },
+    ])
     setAdding(false)
     if (out.ok) {
       setNewName('')
-      toast({ title: 'Student added', description: name })
+      const issued = out.students?.map((s) => s.studentCode).filter(Boolean) ?? []
+      toast({
+        title: 'Student registered',
+        description: issued.length > 0 ? `Issued ID: ${issued.join(', ')}` : name,
+      })
     } else {
-      toast({ title: 'Could not add the student', description: out.error, variant: 'destructive' })
+      toast({ title: 'Could not register the student', description: out.error, variant: 'destructive' })
+    }
+  }
+
+  const doBackfill = async () => {
+    setBackfilling(true)
+    const out = await backfillStudentCodes()
+    setBackfilling(false)
+    if (out.ok) {
+      toast({
+        title:
+          out.issued && out.issued > 0
+            ? `Issued ${out.issued} missing ID${out.issued === 1 ? '' : 's'}`
+            : 'No missing IDs to generate',
+        description:
+          out.issued && out.issued > 0
+            ? 'Students whose details don\'t satisfy the ID pattern stayed uncoded — assign their center or grade first.'
+            : undefined,
+      })
+    } else {
+      toast({ title: 'Could not generate the missing IDs', description: out.error, variant: 'destructive' })
     }
   }
 
   const openEdit = (row: StudentStandingRow) => {
     setEditTarget(row)
     setEditName(row.name)
+    setEditGrade(row.grade ?? '')
     setEditCenterId(row.centerId ?? NO_CENTER)
   }
 
@@ -133,6 +203,7 @@ export function StudentsView() {
     setSaving(true)
     const out = await updateStudent(editTarget.studentId, {
       name: editName.trim(),
+      grade: editGrade.trim(),
       centerId: editCenterId === NO_CENTER ? null : editCenterId,
     })
     setSaving(false)
@@ -162,7 +233,7 @@ export function StudentsView() {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.26, ease: easeOutExpo }}
-      className="mx-auto w-full max-w-4xl px-4 pt-6 sm:px-6"
+      className="mx-auto w-full max-w-5xl px-4 pt-6 sm:px-6"
     >
       <PageHeader
         title="Students"
@@ -180,45 +251,117 @@ export function StudentsView() {
         }
       />
 
-      {/* Add student (any signed-in staff — the roster is built in the field) */}
+      {/* Registration stage — name + center + grade in, issued ID out.
+          Any signed-in staff can register; the form previews the next
+          ID live so the operator can read it back to the student. */}
       {session ? (
-        <div className="mt-5 flex flex-col gap-2 rounded-lg border bg-card p-3 sm:flex-row sm:items-end">
-          <div className="flex-1">
-            <Input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Student name"
-              aria-label="Student name"
-              autoComplete="off"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void doAdd()
-              }}
-            />
-            <p className="mt-1.5 text-[11px] text-muted-foreground">
-              Two students can share a name — the system tells them apart internally
-            </p>
+        <div className="mt-5 space-y-3 rounded-lg border bg-card p-3.5">
+          <div className="grid gap-2.5 sm:grid-cols-12">
+            <div className="sm:col-span-4">
+              <Label htmlFor="reg-name" className="text-xs text-muted-foreground">
+                Name
+              </Label>
+              <Input
+                id="reg-name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="e.g. Kasun Perera"
+                autoComplete="off"
+                className="mt-1.5"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !missingCenterForRegistration && !missingGradeForRegistration) {
+                    void doRegister()
+                  }
+                }}
+              />
+            </div>
+            <div className="sm:col-span-4">
+              <Label className="text-xs text-muted-foreground">
+                Center{needsCenter ? ' (required by ID pattern)' : ''}
+              </Label>
+              <Select value={newCenterId} onValueChange={setNewCenterId}>
+                <SelectTrigger className="mt-1.5 w-full" aria-label="Center">
+                  <SelectValue placeholder="Center" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_CENTER}>No center yet</SelectItem>
+                  {centers.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.centerCode}
+                      {c.centerName ? ` — ${c.centerName}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="sm:col-span-2">
+              <Label htmlFor="reg-grade" className="text-xs text-muted-foreground">
+                Grade{needsGrade ? ' *' : ''}
+              </Label>
+              <Input
+                id="reg-grade"
+                value={newGrade}
+                onChange={(e) => setNewGrade(e.target.value)}
+                placeholder={needsGrade ? 'e.g. 8' : '—'}
+                autoComplete="off"
+                className="mt-1.5"
+                inputMode="numeric"
+              />
+            </div>
+            <div className="flex items-end sm:col-span-2">
+              <Button
+                className="h-9 w-full gap-1.5"
+                onClick={() => void doRegister()}
+                disabled={adding || !newName.trim() || missingCenterForRegistration || missingGradeForRegistration}
+              >
+                {adding ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
+                Register
+              </Button>
+            </div>
           </div>
-          <Select value={newCenterId} onValueChange={setNewCenterId}>
-            <SelectTrigger className="w-full sm:w-52" aria-label="Center">
-              <SelectValue placeholder="Center" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NO_CENTER}>No center yet</SelectItem>
-              {centers.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.centerCode}
-                  {c.centerName ? ` — ${c.centerName}` : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 font-semibold text-primary">
+              <Sparkles className="h-3.5 w-3.5" aria-hidden />
+              Next ID: <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs tabular-nums">{previewCode}</span>
+            </span>
+            <span className="inline-flex items-center gap-1">
+              pattern <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">{pattern}</code>
+              {isAdmin ? ' — customize in Settings' : ''}
+            </span>
+          </div>
+          {missingCenterForRegistration ? (
+            <p className="text-[11px] font-medium text-amber-700 dark:text-amber-400">
+              The ID pattern includes {'{center}'} — pick a center before registering.
+            </p>
+          ) : null}
+          {missingGradeForRegistration ? (
+            <p className="text-[11px] font-medium text-amber-700 dark:text-amber-400">
+              The ID pattern includes {'{grade}'} — enter the student&rsquo;s grade before registering.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Legacy students registered before IDs existed — one click
+          issues their codes from the current pattern. */}
+      {isAdmin && uncoded.length > 0 ? (
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-sky-600/30 bg-sky-500/5 px-3.5 py-2.5 text-[13px]">
+          <BadgeCheck className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" aria-hidden />
+          <p className="min-w-0 flex-1 text-muted-foreground">
+            {uncoded.length === 1
+              ? 'One student was registered before IDs were introduced and has no code yet.'
+              : `${uncoded.length} students were registered before IDs were introduced and have no code yet.`}{' '}
+            Generate their IDs from the current pattern ({pattern}).
+          </p>
           <Button
-            className="h-9 shrink-0 gap-1.5"
-            onClick={() => void doAdd()}
-            disabled={adding || !newName.trim()}
+            size="sm"
+            variant="outline"
+            className="h-8 shrink-0 gap-1.5"
+            onClick={() => void doBackfill()}
+            disabled={backfilling}
           >
-            {adding ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
-            Add
+            {backfilling ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <BadgeCheck className="h-3.5 w-3.5" aria-hidden />}
+            Generate missing IDs
           </Button>
         </div>
       ) : null}
@@ -231,7 +374,7 @@ export function StudentsView() {
           <p>
             {unassigned.length === 1
               ? `${unassigned[0].name} is not assigned`
-              : `${unassigned.length} students are not assigned`}${' '}
+              : `${unassigned.length} students are not assigned`}{' '}
             to a center — their marks count toward the student ranking but toward no center&rsquo;s event places.
             {isAdmin ? ' Assign them below.' : ' An administrator can assign them.'}
           </p>
@@ -245,8 +388,8 @@ export function StudentsView() {
             title="No students yet"
             hint={
               session
-                ? 'Add the first student above — centers can be assigned later as the lists arrive.'
-                : 'Sign in to add students. The roster is built as mark sheets arrive from the field.'
+                ? 'Register the first student above — name and center are all it takes.'
+                : 'Sign in to register students. Their IDs are issued on registration.'
             }
             className="border-0"
           />
@@ -256,6 +399,7 @@ export function StudentsView() {
               <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
                   <TableHead className="w-14 text-center">Rank</TableHead>
+                  <TableHead className="w-32">Student ID</TableHead>
                   <TableHead>Student</TableHead>
                   <TableHead>Center</TableHead>
                   <TableHead className="text-center">Events</TableHead>
@@ -291,12 +435,16 @@ export function StudentsView() {
                         {row.rank}
                       </TableCell>
                       <TableCell>
+                        <span className="font-mono text-xs font-semibold tabular-nums">
+                          {row.studentCode ?? (
+                            <span className="font-sans font-normal text-muted-foreground">
+                              {studentShortId(row.studentId)}
+                            </span>
+                          )}
+                        </span>
+                      </TableCell>
+                      <TableCell>
                         <span className="text-sm font-medium">{row.name}</span>
-                        {duplicateNames.has(row.name) ? (
-                          <span className="ml-1.5 rounded bg-muted px-1 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
-                            {studentShortId(row.studentId)}
-                          </span>
-                        ) : null}
                       </TableCell>
                       <TableCell>
                         <span className="font-semibold tabular-nums text-muted-foreground">
@@ -346,9 +494,11 @@ export function StudentsView() {
       </div>
 
       <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-        Student marks are entered per event from the Scoring console (event → <span className="font-medium">Student marks</span>).
-        Each center&rsquo;s event entry is the sum of its students&rsquo; marks; centers are then placed against each other and
-        earn the fixed place points. Ties on totals break by events, then best single mark.
+        Student IDs are issued once at registration from the pattern in Settings and never change — use them to
+        reference students anywhere. Student marks are entered per event from the Overview matrix (event →{' '}
+        <span className="font-medium">Student marks</span>). Each center&rsquo;s event entry is the sum of its
+        students&rsquo; marks; centers are then placed against each other and earn the fixed place points. Ties on
+        totals break by events, then best single mark.
       </p>
 
       {/* Edit student dialog */}
@@ -357,9 +507,12 @@ export function StudentsView() {
           <DialogHeader>
             <DialogTitle>Edit student</DialogTitle>
             <DialogDescription>
+              {editTarget?.studentCode
+                ? `ID ${editTarget.studentCode} stays with this student — IDs never change.`
+                : 'This student predates issued IDs — saving issues their ID from the current pattern.'}
               {editTarget && editTarget.events > 0
-                ? `This student has marks in ${editTarget.events} event${editTarget.events === 1 ? '' : 's'} — moving their center re-derives those events' podiums automatically.`
-                : 'Rename the student or assign them to a center.'}
+                ? ` They hold marks in ${editTarget.events} event${editTarget.events === 1 ? '' : 's'} — moving their center re-derives those events' podiums automatically.`
+                : ''}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
@@ -373,22 +526,35 @@ export function StudentsView() {
                 autoComplete="off"
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="student-center">Center</Label>
-              <Select value={editCenterId} onValueChange={setEditCenterId}>
-                <SelectTrigger id="student-center" className="w-full">
-                  <SelectValue placeholder="Assign a center" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_CENTER}>No center yet</SelectItem>
-                  {centers.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.centerCode}
-                      {c.centerName ? ` — ${c.centerName}` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="student-grade">Grade</Label>
+                <Input
+                  id="student-grade"
+                  value={editGrade}
+                  onChange={(e) => setEditGrade(e.target.value)}
+                  placeholder="e.g. 8"
+                  autoComplete="off"
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="student-center">Center</Label>
+                <Select value={editCenterId} onValueChange={setEditCenterId}>
+                  <SelectTrigger id="student-center" className="w-full">
+                    <SelectValue placeholder="Assign a center" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_CENTER}>No center yet</SelectItem>
+                    {centers.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.centerCode}
+                        {c.centerName ? ` — ${c.centerName}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -413,10 +579,7 @@ export function StudentsView() {
           <AlertDialogHeader>
             <AlertDialogTitle>
               Remove {removeTarget?.name}
-              {removeTarget && duplicateNames.has(removeTarget.name)
-                ? ` (${studentShortId(removeTarget.studentId)})`
-                : ''}
-              ?
+              {removeTarget?.studentCode ? ` (${removeTarget.studentCode})` : ''}?
             </AlertDialogTitle>
             <AlertDialogDescription>
               {removeTarget && removeTarget.events > 0

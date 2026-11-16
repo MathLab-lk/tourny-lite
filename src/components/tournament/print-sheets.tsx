@@ -104,7 +104,8 @@ function StudentRankingSheet() {
   const { tournament, students, studentStandings } = detail
   const scored = studentStandings.filter((s) => s.events > 0).length
 
-  // Names that appear more than once — their rows carry the short id.
+  // Names that appear more than once — their rows carry the issued
+  // student ID (or the short internal id for legacy students).
   const counts = new Map<string, number>()
   for (const s of students) counts.set(s.name, (counts.get(s.name) ?? 0) + 1)
   const duplicates = new Set([...counts.entries()].filter(([, n]) => n > 1).map(([n]) => n))
@@ -139,9 +140,9 @@ function StudentRankingSheet() {
                 <td className="p-1.5 font-semibold">{row.events > 0 ? row.rank : '—'}</td>
                 <td className="p-1.5 font-semibold">
                   {row.name}
-                  {duplicates.has(row.name) ? (
-                    <span className="ml-1 font-mono text-[9px] text-gray-600">{studentShortId(row.studentId)}</span>
-                  ) : null}
+                  <span className="ml-1 font-mono text-[9px] text-gray-600">
+                    {row.studentCode ?? (duplicates.has(row.name) ? studentShortId(row.studentId) : '')}
+                  </span>
                 </td>
                 <td className="p-1.5">{row.centerCode ?? '—'}</td>
                 <td className="p-1.5 text-center">{row.events > 0 ? row.events : '—'}</td>

@@ -1,6 +1,5 @@
 'use client'
 
-import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Award, Crown, GraduationCap, Medal, Trophy } from 'lucide-react'
 import { AnimatedNumber } from '@/components/tournament/ui-bits'
@@ -81,13 +80,18 @@ function RankCoin({ rank, large }: { rank: 1 | 2 | 3; large?: boolean }) {
  * public guest scoreboard so both tell the same story.
  */
 export function StudentRankingsStage({ rows, className }: { rows: StudentStandingRow[]; className?: string }) {
-  // Names that exist more than once carry the short internal id so
-  // the audience can tell two same-named students apart.
-  const duplicateNames = useMemo(() => {
-    const seen = new Map<string, number>()
-    for (const r of rows) seen.set(r.name, (seen.get(r.name) ?? 0) + 1)
-    return new Set([...seen.entries()].filter(([, n]) => n > 1).map(([name]) => name))
-  }, [rows])
+  // The name line leads with the issued student ID — the field
+  // reference — so two students who share a name are always told
+  // apart. Legacy students without a code fall back to the short
+  // internal id.
+  const name = (row: StudentStandingRow) => (
+    <span className="block truncate font-semibold text-white">
+      {row.name}
+      <span className="ml-1.5 rounded bg-white/10 px-1 py-0.5 text-[10px] font-medium tabular-nums text-zinc-400">
+        {row.studentCode ?? studentShortId(row.studentId)}
+      </span>
+    </span>
+  )
 
   // Walk the ranking in order: the first three scored students take
   // the podium; everyone else (including not-yet-scored students)
@@ -98,17 +102,6 @@ export function StudentRankingsStage({ rows, className }: { rows: StudentStandin
     if (podium.length < 3 && row.events > 0) podium.push(row)
     else rest.push(row)
   }
-
-  const name = (row: StudentStandingRow) => (
-    <span className="block truncate font-semibold text-white">
-      {row.name}
-      {duplicateNames.has(row.name) ? (
-        <span className="ml-1.5 rounded bg-white/10 px-1 py-0.5 text-[10px] font-medium tabular-nums text-zinc-400">
-          {studentShortId(row.studentId)}
-        </span>
-      ) : null}
-    </span>
-  )
 
   if (rows.length === 0) {
     return (

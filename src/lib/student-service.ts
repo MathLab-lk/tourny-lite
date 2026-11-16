@@ -1,6 +1,6 @@
 import { db } from '@/lib/db'
 import { emitTournamentChanged } from '@/lib/bus'
-import { computeCenterSums } from '@/lib/student-math'
+import { computeCenterSums, nextIndexInScope, renderStudentCode } from '@/lib/student-math'
 import { discardResetSnapshot } from '@/lib/result-service'
 import type {
   CenterSumRow,
@@ -10,7 +10,7 @@ import type {
 } from '@/lib/types'
 
 /**
- * Student rankings — the experimental second scoring mode.
+ * Student rankings — the second scoring mode.
  *
  * Centers earn fixed marks per place (75/50/25 by default); students
  * earn custom marks typed off the field mark sheet. For a
@@ -18,6 +18,12 @@ import type {
  * students' marks; centers are then ranked by that sum against the
  * other centers, and the top three receive the event's podium
  * places (which pay the usual fixed points).
+ *
+ * Students enter through a REGISTRATION stage: name + center (+ grade
+ * as the pattern needs) issues a human-readable studentCode composed
+ * from the tournament's studentIdPattern (e.g. "402-8-07"). That code
+ * is the field reference — two students who share a name can never be
+ * confused again. Codes are issued once and never regenerated.
  *
  * The derived podium is written to the same EventResult the podium
  * flow uses, so standings, the live scoreboard, share cards and the
@@ -41,42 +47,132 @@ async function assertCenterInTournament(tournamentId: string, centerId: string) 
   if (!inTournament) throw new Error('Center does not belong to this tournament')
 }
 
-/** Adds students to a tournament. The roster is built on the go —
- *  names only, center optional (assignable later). */
-export async function addStudents(
+/** Patterns that mention {center} need a center at registration;
+ *  {grade} needs a grade. Validated before any code is issued. */
+function assertPatternInputs(
+  pattern: string,
+  input: { centerId: string | null; grade: string }
+) {
+  if (pattern.includes('{center}') && !input.centerId) {
+    throw new Error('The current ID pattern includes {center} — assign a center to register this student')
+  }
+  if (pattern.includes('{grade}') && !input.grade.trim()) {
+    throw new Error("The current ID pattern includes {grade} — enter the student's grade")
+  }
+}
+
+/** Issues codes for new registrations. The unique (tournamentId,
+ *  studentCode) constraint is the last line of defence against two
+ *  devices registering into the same scope at once — on collision the
+ *  index bumps and we retry, so a code is always issued. */
+async function issueCode(
+  tournamentId: string,
+  pattern: string,
+  roster: { studentCode: string | null; centerId: string | null; grade: string | null }[],
+  input: { name: string; centerId: string | null; grade: string },
+  centerCode: string | null
+): Promise<string> {
+  const taken = new Set(
+    roster
+      .map((s) => s.studentCode)
+      .filter((c): c is string => Boolean(c))
+      .map((c) => c.toUpperCase())
+  )
+  let index = nextIndexInScope(pattern, roster, input)
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const code = renderStudentCode(pattern, {
+      name: input.name,
+      centerCode,
+      grade: input.grade,
+      index,
+    })
+    if (!taken.has(code.toUpperCase())) {
+      const clash = await db.student.findFirst({
+        where: { tournamentId, studentCode: code },
+        select: { id: true },
+      })
+      if (!clash) return code
+    }
+    // Someone registered into the same scope concurrently (or the
+    // pattern has no {index}) — bump and try the next number.
+    index += 1
+  }
+  throw new Error('Could not issue a unique student ID — check the ID pattern in Settings')
+}
+
+/** Registers students on a tournament: name + center (+ grade as
+ *  the pattern needs). Each student is issued a unique, human-
+ *  readable studentCode from the tournament's ID pattern — the
+ *  reference the field uses when recording marks. */
+export async function registerStudents(
   tournamentId: string,
   inputs: StudentInput[]
 ): Promise<StudentDTO[]> {
   const valid = inputs
-    .map((s) => ({ name: String(s.name ?? '').trim(), centerId: s.centerId ?? null }))
+    .map((s) => ({
+      name: String(s.name ?? '').trim(),
+      centerId: s.centerId ?? null,
+      grade: String(s.grade ?? '').trim(),
+    }))
     .filter((s) => s.name.length > 0)
   if (valid.length === 0) throw new Error('At least one student name is required')
 
   const tournament = await db.tournament.findUnique({
     where: { id: tournamentId },
-    select: { status: true },
+    select: { status: true, studentIdPattern: true },
   })
   if (!tournament) throw new Error('Tournament not found')
   if (tournament.status === 'archived') throw new Error('Tournament is archived')
+  const pattern = tournament.studentIdPattern
 
   for (const s of valid) {
     if (s.centerId) await assertCenterInTournament(tournamentId, s.centerId)
+    assertPatternInputs(pattern, s)
   }
 
-  // Created one by one so each new row (and its internal id) comes
-  // back — same-name students must stay distinct entities.
+  // Codes are issued against the freshest roster state; the unique
+  // constraint catches anything that slipped in between read and write.
   const created: StudentDTO[] = []
   for (const s of valid) {
-    const row = await db.student.create({
-      data: { tournamentId, name: s.name, centerId: s.centerId },
+    let row: { id: string } | null = null
+    for (let attempt = 0; attempt < 3 && !row; attempt++) {
+      const roster = await db.student.findMany({
+        where: { tournamentId },
+        select: { studentCode: true, centerId: true, grade: true },
+      })
+      const centerCode = s.centerId
+        ? (
+            await db.center.findUnique({
+              where: { id: s.centerId },
+              select: { centerCode: true },
+            })
+          )?.centerCode ?? null
+        : null
+      const code = await issueCode(tournamentId, pattern, roster, s, centerCode)
+      try {
+        row = await db.student.create({
+          data: {
+            tournamentId,
+            name: s.name,
+            grade: s.grade,
+            centerId: s.centerId,
+            studentCode: code,
+          },
+          select: { id: true },
+        })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : ''
+        if (!msg.includes('Unique constraint')) throw err
+        // A concurrent registration claimed the code — refresh and retry.
+      }
+    }
+    if (!row) throw new Error('Could not register the student — try again in a moment')
+
+    const fresh = await db.student.findUnique({
+      where: { id: row.id },
+      include: { center: { select: { centerCode: true } } },
     })
-    created.push({
-      id: row.id,
-      name: row.name,
-      centerId: row.centerId,
-      centerCode: null,
-      createdAt: row.createdAt.toISOString(),
-    })
+    if (fresh) created.push(toStudentDTO(fresh))
   }
   emitTournamentChanged(tournamentId)
   return created
@@ -85,6 +181,8 @@ export async function addStudents(
 function toStudentDTO(s: {
   id: string
   name: string
+  studentCode: string | null
+  grade: string | null
   centerId: string | null
   createdAt: Date
   center?: { centerCode: string } | null
@@ -92,19 +190,24 @@ function toStudentDTO(s: {
   return {
     id: s.id,
     name: s.name,
+    studentCode: s.studentCode,
+    grade: s.grade,
     centerId: s.centerId,
     centerCode: s.center?.centerCode ?? null,
     createdAt: s.createdAt.toISOString(),
   }
 }
 
-/** Edits a student (name and/or center). Reassigning a student who
- *  already has marks re-derives every affected event's podium, so
- *  the center sums stay truthful. */
+/** Edits a student (name, grade and/or center). Reassigning a student
+ *  who already has marks re-derives every affected event's podium, so
+ *  the center sums stay truthful. The studentCode never changes — it
+ *  is the stable field reference; correcting a wrong center or grade
+ *  does not renumber anyone. A legacy student without a code (added
+ *  before registration existed) picks one up on their first edit. */
 export async function updateStudent(
   tournamentId: string,
   studentId: string,
-  patch: { name?: string; centerId?: string | null },
+  patch: { name?: string; centerId?: string | null; grade?: string | null },
   actor: string
 ): Promise<StudentDTO> {
   const student = await db.student.findUnique({ where: { id: studentId } })
@@ -114,6 +217,8 @@ export async function updateStudent(
 
   const name = patch.name !== undefined ? String(patch.name).trim() : student.name
   if (!name) throw new Error('Student name cannot be empty')
+  const grade =
+    patch.grade !== undefined ? String(patch.grade ?? '').trim() : student.grade
 
   let centerId = student.centerId
   if (patch.centerId !== undefined) {
@@ -122,7 +227,33 @@ export async function updateStudent(
   }
 
   const centerChanged = centerId !== student.centerId
-  await db.student.update({ where: { id: studentId }, data: { name, centerId } })
+  // Codes are issued once; a legacy student without one picks it up
+  // here so the roster converges on fully-coded over time.
+  let studentCode = student.studentCode
+  if (!studentCode) {
+    const tournament = await db.tournament.findUnique({
+      where: { id: tournamentId },
+      select: { studentIdPattern: true },
+    })
+    const pattern = tournament?.studentIdPattern ?? '{center}-{grade}-{index}'
+    const roster = await db.student.findMany({
+      where: { tournamentId },
+      select: { studentCode: true, centerId: true, grade: true },
+    })
+    const centerCode = centerId
+      ? (await db.center.findUnique({ where: { id: centerId }, select: { centerCode: true } }))
+          ?.centerCode ?? null
+      : null
+    studentCode = await issueCode(
+      tournamentId,
+      pattern,
+      roster,
+      { name, centerId, grade },
+      centerCode
+    )
+  }
+
+  await db.student.update({ where: { id: studentId }, data: { name, grade, centerId, studentCode } })
 
   if (centerChanged) {
     const affected = await db.studentScore.findMany({
@@ -162,6 +293,50 @@ export async function removeStudent(tournamentId: string, studentId: string, act
   }
 
   emitTournamentChanged(tournamentId)
+}
+
+/** Issues codes to every legacy student registered before the
+ *  registration stage existed (studentCode is null). Never touches
+ *  students that already carry a code. */
+export async function backfillStudentCodes(tournamentId: string): Promise<number> {
+  const tournament = await db.tournament.findUnique({
+    where: { id: tournamentId },
+    select: { studentIdPattern: true },
+  })
+  if (!tournament) throw new Error('Tournament not found')
+  const pattern = tournament.studentIdPattern
+
+  const legacy = await db.student.findMany({
+    where: { tournamentId, studentCode: null },
+    orderBy: { createdAt: 'asc' },
+    include: { center: { select: { centerCode: true } } },
+  })
+  let issued = 0
+  for (const student of legacy) {
+    // The roster view refreshes per student, so indexes inside one
+    // backfill run follow the registration sequence.
+    const roster = await db.student.findMany({
+      where: { tournamentId },
+      select: { studentCode: true, centerId: true, grade: true },
+    })
+    try {
+      const code = await issueCode(
+        tournamentId,
+        pattern,
+        roster,
+        { name: student.name, centerId: student.centerId, grade: student.grade },
+        student.center?.centerCode ?? null
+      )
+      await db.student.update({ where: { id: student.id }, data: { studentCode: code } })
+      issued += 1
+    } catch {
+      // A student whose inputs don't satisfy the pattern (e.g. no
+      // center while the pattern needs one) stays uncoded — the
+      // roster page shows exactly who is missing what.
+    }
+  }
+  if (issued > 0) emitTournamentChanged(tournamentId)
+  return issued
 }
 
 // ── scoring ────────────────────────────────────────────────────

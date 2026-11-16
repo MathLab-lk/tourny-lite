@@ -171,36 +171,58 @@ export function PodiumEditor({ centers, points, value, onChange, disabled }: Pod
         })}
       </div>
 
-      {/* Center buttons */}
+      {/* Center buttons — a center may hold several places in one
+          event (a dominant center can take 1st and 2nd); its button
+          carries a badge per place it already holds, so assignments
+          are always visible at a glance. */}
       <div>
         <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">
           {disabled
             ? 'Sign in to assign places'
             : activeSlot
-              ? `Select the ${SLOT_META[activeSlot].label.toLowerCase()} center`
+              ? `Select the ${SLOT_META[activeSlot].label.toLowerCase()} center — the same center may take several places`
               : 'All places assigned — tap a place to change it'}
         </p>
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
           {centers.map((c) => {
-            const takenBy = ORDER.find((s) => value[s] === c.id)
+            const places = ORDER.filter((s) => value[s] === c.id)
             const assignedHere = activeSlot !== null && value[activeSlot] === c.id
             return (
               <Button
                 key={c.id}
                 type="button"
-                variant={assignedHere ? 'default' : 'outline'}
-                disabled={disabled || !activeSlot || (takenBy !== undefined && !assignedHere)}
+                variant={assignedHere || places.length > 0 ? 'default' : 'outline'}
+                disabled={disabled || !activeSlot}
                 onClick={() => assign(c.id)}
                 className={cn(
-                  'h-14 flex-col items-center justify-center gap-0.5 text-base font-semibold tabular-nums transition-all duration-200',
-                  takenBy !== undefined && !assignedHere && 'opacity-40'
+                  'relative h-14 flex-col items-center justify-center gap-0.5 text-base font-semibold tabular-nums transition-all duration-200',
+                  !assignedHere && places.length > 0 && 'opacity-80'
                 )}
-                aria-label={`Center ${c.centerCode}${takenBy ? `, already ${takenBy} place` : ''}`}
+                aria-label={`Center ${c.centerCode}${places.length > 0 ? `, currently holds ${places.map((p) => SLOT_META[p].short).join(' and ')} place` : ''}`}
               >
                 {c.centerCode}
                 {c.centerName ? (
-                  <span className="max-w-full truncate text-[10px] font-normal text-muted-foreground">
+                  <span className="max-w-full truncate text-[10px] font-normal opacity-70">
                     {c.centerName}
+                  </span>
+                ) : null}
+                {places.length > 0 ? (
+                  <span
+                    className="absolute right-1 top-1 flex gap-0.5"
+                    aria-hidden
+                  >
+                    {places.map((p) => (
+                      <span
+                        key={p}
+                        className={cn(
+                          'flex h-4 min-w-4 items-center justify-center rounded px-0.5 text-[9px] font-bold leading-none',
+                          SLOT_META[p].text,
+                          'bg-background/70 dark:bg-background/50'
+                        )}
+                      >
+                        {SLOT_META[p].short}
+                      </span>
+                    ))}
                   </span>
                 ) : null}
               </Button>

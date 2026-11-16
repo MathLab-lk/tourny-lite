@@ -8,7 +8,6 @@ import {
   Lock,
   Plus,
   Send,
-  UserPlus,
   Users,
   X,
 } from 'lucide-react'
@@ -43,13 +42,16 @@ import type { CenterDTO, EventDTO, StudentDTO } from '@/lib/types'
 /**
  * Student mark sheet — the field console for events scored by
  * individual student marks. One collapsible-free list: a section per
- * center, a row per student (pick the student, type their custom
- * marks), as many rows per center as the event needs — the student
- * count per center varies by event.
+ * center, a row per registered student (picked by their issued
+ * student ID, so two students who share a name can never be
+ * confused), as many rows per center as the event needs.
  *
- * While you type, the derived center podium updates live: each
- * center's entry is the sum of its students' marks, ranked against
- * the other centers, paying the fixed place points.
+ * The roster is NEVER edited here — students are registered on the
+ * Students page (name + center + grade → issued ID); this console
+ * only references registered students. While you type, the derived
+ * center podium updates live: each center's entry is the sum of its
+ * students' marks, ranked against the other centers, paying the
+ * fixed place points.
  */
 
 interface Row {
@@ -72,7 +74,6 @@ export function StudentMarksEditor({
   const detail = useAppStore((s) => s.detail)
   const session = useAppStore((s) => s.session)
   const submitStudentScores = useAppStore((s) => s.submitStudentScores)
-  const addStudents = useAppStore((s) => s.addStudents)
 
   const centers = detail?.centers ?? []
   const students = detail?.students ?? []
@@ -95,9 +96,6 @@ export function StudentMarksEditor({
     return initial
   })
 
-  const [newStudentFor, setNewStudentFor] = useState<string | null>(null)
-  const [newStudentName, setNewStudentName] = useState('')
-  const [addingStudent, setAddingStudent] = useState(false)
   const [notes, setNotes] = useState(event.result?.notes ?? '')
   const [reason, setReason] = useState('')
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -109,14 +107,14 @@ export function StudentMarksEditor({
   const studentsOf = (centerId: string) =>
     students.filter((s) => (centerId === 'unassigned' ? !s.centerId : s.centerId === centerId))
 
-  const duplicateNames = useMemo(() => {
-    const seen = new Map<string, number>()
-    for (const s of students) seen.set(s.name, (seen.get(s.name) ?? 0) + 1)
-    return new Set([...seen.entries()].filter(([, n]) => n > 1).map(([name]) => name))
-  }, [students])
-
+  /** How a student reads in the picker: their issued ID first (the
+   *  field reference), then the name. Legacy students without a code
+   *  (registered before IDs existed) fall back to name + internal
+   *  short id. */
   const studentLabel = (s: StudentDTO) =>
-    duplicateNames.has(s.name) ? `${s.name} ${studentShortId(s.id)}` : s.name
+    s.studentCode
+      ? `${s.studentCode} · ${s.name}`
+      : `${s.name} ${studentShortId(s.id)}`
 
   const setRows = (bucket: string, rows: Row[]) =>
     setRowsByCenter((prev) => ({ ...prev, [bucket]: rows }))
@@ -162,10 +160,16 @@ export function StudentMarksEditor({
     return broken
   }, [rowsByCenter])
 
-  const usedStudentIds = useMemo(
-    () => new Set(validRows.map((r) => r.studentId)),
-    [validRows]
-  )
+  /** A student can only appear on the sheet once — guard across
+   * every row that already names them, not just the valid ones, so
+   * the picker can never offer a student twice. */
+  const usedStudentIds = useMemo(() => {
+    const used = new Set<string>()
+    for (const rows of Object.values(rowsByCenter)) {
+      for (const r of rows) if (r.studentId) used.add(r.studentId)
+    }
+    return used
+  }, [rowsByCenter])
 
   // Live preview of what the sheet implies: center sums → podium.
   const centerSums = useMemo(
@@ -181,29 +185,6 @@ export function StudentMarksEditor({
 
   const canSubmit = session !== null && validRows.length > 0 && brokenRowCount === 0
 
-  const quickAddStudent = async (bucket: string) => {
-    const name = newStudentName.trim()
-    if (!name) return
-    setAddingStudent(true)
-    const centerId = bucket === 'unassigned' ? null : bucket
-    const out = await addStudents([{ name, centerId }])
-    setAddingStudent(false)
-    if (!out.ok) {
-      toast({ title: 'Could not add the student', description: out.error, variant: 'destructive' })
-      return
-    }
-    // The store refreshed the detail; find the freshly created row.
-    const fresh = useAppStore.getState().detail?.students ?? []
-    const match = fresh
-      .filter((s) => s.name === name && (s.centerId ?? null) === centerId)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
-    setNewStudentName('')
-    setNewStudentFor(null)
-    if (match) {
-      setRows(bucket, [...(rowsByCenter[bucket] ?? []), { key: nextRowKey(), studentId: match.id, marks: '' }])
-    }
-  }
-
   const doSubmit = async () => {
     setSubmitting(true)
     const out = await submitStudentScores({
@@ -211,7 +192,7 @@ export function StudentMarksEditor({
       scores: validRows.map((r) => ({ studentId: r.studentId, marks: r.marks })),
       recordedBy: session?.name ?? '',
       notes,
-      reason: reason.trim() || 'Re-entered from the scoring console',
+      reason: reason.trim() || 'Re-entered from the event dialog',
     })
     setSubmitting(false)
     setConfirmOpen(false)
@@ -280,65 +261,18 @@ export function StudentMarksEditor({
               variant="ghost"
               size="sm"
               className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-              onClick={() => setNewStudentFor(newStudentFor === bucket ? null : bucket)}
-              disabled={addingStudent}
-            >
-              <UserPlus className="h-3.5 w-3.5" aria-hidden /> New student
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1 px-2 text-xs text-muted-foreground"
               onClick={() => addRow(bucket)}
-              disabled={bucketStudents.length === 0 && newStudentFor !== bucket}
             >
               <Plus className="h-3.5 w-3.5" aria-hidden /> Row
             </Button>
           </div>
         </div>
 
-        <AnimatePresence initial={false}>
-          {newStudentFor === bucket ? (
-            <motion.div
-              key={`new-${bucket}`}
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.24, ease: easeOutExpo }}
-              className="overflow-hidden border-b bg-primary/[0.04]"
-            >
-              <div className="flex items-center gap-2 px-3 py-2">
-                <Input
-                  autoFocus
-                  value={newStudentName}
-                  onChange={(e) => setNewStudentName(e.target.value)}
-                  placeholder="New student's name"
-                  className="h-8"
-                  disabled={addingStudent}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      void quickAddStudent(bucket)
-                    }
-                  }}
-                />
-                <Button
-                  size="sm"
-                  className="h-8 shrink-0 gap-1"
-                  onClick={() => void quickAddStudent(bucket)}
-                  disabled={addingStudent || !newStudentName.trim()}
-                >
-                  {addingStudent ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Plus className="h-3.5 w-3.5" aria-hidden />}
-                  Add
-                </Button>
-              </div>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
-
-        {rows.length === 0 && newStudentFor !== bucket ? (
+        {rows.length === 0 ? (
           <p className="px-3 py-2.5 text-xs text-muted-foreground">
-            No students entered for this center — use Row if its students are registered, or New student to register one now.
+            {bucketStudents.length === 0
+              ? 'No registered students for this center yet — register them on the Students page first.'
+              : 'No rows yet — add a row and pick each student by their issued ID.'}
           </p>
         ) : (
           <ul className="divide-y">
@@ -368,7 +302,7 @@ export function StudentMarksEditor({
                       <SelectContent>
                         {bucketStudents.length === 0 ? (
                           <div className="px-3 py-2 text-xs text-muted-foreground">
-                            No students registered for this center yet
+                            No registered students for this center — register them on the Students page
                           </div>
                         ) : null}
                         {bucketStudents.map((s) => (

@@ -65,6 +65,7 @@ function toTournamentDTO(t: {
   pointsFirst: number
   pointsSecond: number
   pointsThird: number
+  studentIdPattern: string
   templateId: string | null
   createdAt: Date
   updatedAt: Date
@@ -230,6 +231,8 @@ export async function getTournamentDetail(
   const students: StudentDTO[] = t.students.map((s) => ({
     id: s.id,
     name: s.name,
+    studentCode: s.studentCode,
+    grade: s.grade,
     centerId: s.centerId,
     centerCode: s.center?.centerCode ?? null,
     createdAt: s.createdAt.toISOString(),

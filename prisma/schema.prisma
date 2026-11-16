@@ -24,6 +24,9 @@ model Tournament {
   pointsSecond Int      @default(50)
   pointsThird  Int      @default(25)
   templateId   String? // preset identifier e.g. math_comp_2026
+  // How registered student IDs are composed (see student-math.ts):
+  // {center} {grade} {index} {initials} {year} tokens, e.g. "{center}-{grade}-{index}"
+  studentIdPattern String @default("{center}-{grade}-{index}")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -124,6 +127,8 @@ model Student {
   tournamentId String
   centerId     String?
   name         String
+  grade        String   @default("")
+  studentCode  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -131,6 +136,7 @@ model Student {
   center     Center?        @relation(fields: [centerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   scores     StudentScore[]
 
+  @@unique([tournamentId, studentCode])
   @@index([tournamentId])
   @@index([centerId])
 }

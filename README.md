@@ -11,15 +11,18 @@ Run an entire event from one lightweight application:
   with a single click.
 - **Guided custom setup** — design any competition: your own scoring scheme,
   divisions, games, event counts and center roster in three steps.
-- **Student rankings (experimental)** — events can be scored by individual
-  student marks instead of a picked podium: students (name-identified,
-  internally keyed so same names never collide) belong to centers and earn
-  custom marks per event; each center's entry is the sum of its students'
-  marks, and the podium — plus the fixed place points — is derived from
-  those sums. A live student leaderboard ranks every competitor.
-- **Field scoring console** — touch-optimised for phones and tablets.
-  Scorekeepers pick a division, a game and an event, then assign the podium
-  with three taps. Results saved while offline sync automatically.
+- **Student rankings with a registration stage** — events can be scored
+  by individual student marks instead of a picked podium: students are
+  registered with name, center and grade, receive a unique, pattern-built
+  student ID (`402-8-07`) and earn custom marks per event; each center's
+  entry is the sum of its students' marks, and the podium — plus the fixed
+  place points — is derived from those sums. A live student leaderboard
+  ranks every competitor.
+- **Field scoring on the Overview** — touch-optimised for phones and
+  tablets. The bird's-eye event matrix records everything: tap an event
+  chip, assign the podium with three taps (a center may hold several
+  places) or switch to the per-student mark sheet. Results saved while
+  offline sync automatically.
 - **Live projector scoreboard** — presented from any tournament's Overview
   as a full-screen, high-contrast dark stage with gold / silver / bronze
   rank accents and deterministic tie-breaking (total → first → second →
@@ -65,16 +68,21 @@ restored with the browser's back button:
 | Path | View |
 | --- | --- |
 | `/` | Tournaments (home) |
-| `/t/{id}` | A tournament's Overview |
-| `/t/{id}/scoring` · `/t/{id}/centers` · `/t/{id}/students` · `/t/{id}/history` · `/t/{id}/settings` | The other views |
+| `/t/{id}` | A tournament's Overview (the bird's-eye event matrix — record results from its event dialogs) |
+| `/t/{id}/centers` · `/t/{id}/students` · `/t/{id}/history` · `/t/{id}/settings` | The other views |
 | `/present/{id}` | The public guest scoreboard (no sign-in) |
 
+Legacy `/t/{id}/scoring` links (the retired field console) land on the
+Overview.
+
 - **Home** — the tournament list; every tournament opens on its Overview.
-- **Overview · Scoring · History** — the primary destinations (a glass
-  sidebar on desktop, a four-tab bar — Home, Overview, Scoring, More — on
-  phones).
-- **Centers · Settings** — occasional management work, grouped under
-  *Manage* on the sidebar and inside *More* on phones.
+- **Overview · History** — the primary destinations (a glass sidebar on
+  desktop, a three-tab bar — Home, Overview, More — on phones). The
+  Scoring console was consolidated into the Overview: the event matrix
+  is the bird's-eye view, and every event chip opens the same recording
+  dialog (podium places or student marks) the console had.
+- **Centers · Students · Settings** — occasional management work, grouped
+  under *Manage* on the sidebar and inside *More* on phones.
 - **The scoreboard is a presentation, not a place** — it never occupies a
   tab; *Present* on the Overview throws it on the projector, and closing
   it returns to your context.
@@ -117,17 +125,28 @@ remove centers (with a confirmation that spells out what the standings
 lose). Edits flow everywhere immediately — standings, podium pickers and
 shared cards.
 
-### Students & student rankings (experimental)
+### Students: registration stage & student rankings
 
 Some events arrive as **mark sheets** — per-student marks — rather than a
-picked center podium. Any event can be scored either way; the Scoring
-console shows both tabs (*Center podium* / *Student marks*).
+picked center podium. Any event can be scored either way; the event
+dialog shows both tabs (*Center podium* / *Student marks*).
 
-- **Roster on the go** — students are added by name (any signed-in staff
-  member can, straight from the field), optionally with their center.
-  Centers can be assigned later as the lists arrive; two students may
-  share a name — the system keys them on internal ids and shows a short
-  suffix (`#a4f2`) whenever a name repeats, so they can never be confused.
+- **Registration stage** — students are registered (any signed-in staff
+  member can, straight from the field) with their **name, center and
+  grade**, and the system issues each one a unique **student ID**
+  composed from the tournament's ID pattern — e.g. `402-8-07` (center
+  402, grade 8, roll 07). That ID is the field reference everywhere:
+  mark sheets list students as `402-8-07 · Kasun Perera`, so two
+  students who share a name can never be confused. IDs are issued once
+  and never change — correcting a student's center or grade never
+  renumbers anyone.
+- **Customizable ID pattern** — *Settings → Student IDs* composes the
+  pattern from `{center}`, `{grade}`, `{index}` (roll number, zero-
+  padded; width via `{index3}`), `{initials}` and `{year}` tokens, with
+  a live preview. The roll number scopes to the tokens beside it —
+  `{center}-{grade}-{index}` numbers each center-and-grade class
+  separately. Students registered before IDs existed get theirs with
+  one click (*Generate missing IDs*).
 - **Custom marks** — the mark sheet gives each scored student their own
   marks (any non-negative number, decimals included), with as many or as
   few students per center as the event needs — the count can vary by
@@ -136,7 +155,9 @@ console shows both tabs (*Center podium* / *Student marks*).
   students' marks; centers are ranked by that sum against the other
   centers, and the top three earn the event's podium places, paying the
   usual fixed points (75/50/25 by default). The preview updates live as
-  you type. Ties on sums break by center code.
+  you type. Ties on sums break by center code. A center may also hold
+  several places in one manually-picked podium — a dominant center can
+  sweep 1st and 2nd, and the standings pay both places.
 - **Student ranking** — the Students view ranks every competitor by total
   marks (tie-break: events contested, then best single mark), live. The
   same ranking is a **presentation act**: the in-app scoreboard
@@ -146,8 +167,8 @@ console shows both tabs (*Center podium* / *Student marks*).
   1st → 2nd → 3rd on phones), with the rest of the field gliding into
   place live as marks land. A **Print** button (Students view, and the
   scoreboard's student mode) produces an A4 *Student Ranking Sheet* —
-  every student with rank, center, events, best mark and total,
-  same-name students disambiguated by their short id.
+  every student with rank, issued ID, center, events, best mark and
+  total.
 - **Same guardrails** — correcting a mark sheet requires a justification
   and lands in the audit trail; reassigning or removing a student with
   recorded marks re-derives every affected event automatically; resetting
@@ -155,8 +176,8 @@ console shows both tabs (*Center podium* / *Student marks*).
 - **Offline field entry** — mark sheets queue on the device and sync
   automatically, exactly like podium results.
 
-This feature is experimental: it ships on the `feature/student-rankings`
-branch and is meant to run as a separate experimental deployment (see
+This feature ships on the `feature/student-rankings` branch and is meant
+to run as a separate experimental deployment (see
 [deploy/README.md](deploy/README.md) — *Experimental build*) so the stable
 container is never disturbed.
 

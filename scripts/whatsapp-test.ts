@@ -638,9 +638,9 @@ async function main() {
     // sums derive the podium (center 1 first, center 0 second).
     const roster = await admin.call('POST', `/api/tournaments/${seeded.id}/students`, {
       students: [
-        { name: 'Amara Auto-Share', centerId: centers[0].id },
-        { name: 'Nimal Auto-Share', centerId: centers[0].id },
-        { name: 'Kasun Auto-Share', centerId: centers[1].id },
+        { name: 'Amara Auto-Share', centerId: centers[0].id, grade: '6' },
+        { name: 'Nimal Auto-Share', centerId: centers[0].id, grade: '6' },
+        { name: 'Kasun Auto-Share', centerId: centers[1].id, grade: '6' },
       ],
     })
     ok('probe students added', roster.status === 201 && roster.data.added === 3, roster)

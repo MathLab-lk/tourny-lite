@@ -66,7 +66,9 @@ async function snapshot(resultId: string): Promise<PodiumSnapshot> {
  * Submit (create) or correct (update) a podium result for an event slot.
  * Guardrails:
  *  - centers must belong to the same tournament
- *  - a center cannot occupy two podium places
+ *  - a center MAY occupy several podium places in one event (a
+ *    dominant center sweeps 1st and 2nd) — each place pays its
+ *    own points, and the standings count them all
  *  - overwriting an existing result requires a justification reason (audit)
  */
 export async function submitResult(payload: ResultSubmitPayload) {
@@ -90,11 +92,6 @@ export async function submitResult(payload: ResultSubmitPayload) {
   const placeIds = [payload.firstPlaceCenterId, payload.secondPlaceCenterId, payload.thirdPlaceCenterId]
   const filled = placeIds.filter((v): v is string => Boolean(v))
   if (filled.length === 0) throw new Error('Assign at least one podium place before submitting')
-
-  const uniqueFilled = new Set(filled)
-  if (uniqueFilled.size !== filled.length) {
-    throw new Error('A center cannot take two podium places in the same event')
-  }
 
   const centers = await db.center.findMany({
     where: { tournamentId: event.tournamentId },

@@ -9,7 +9,6 @@ import type { AppRoute } from '@/lib/app-route'
 import { useAppStore } from '@/store/app-store'
 import { AppShell } from '@/components/tournament/app-shell'
 import { HomeView } from '@/components/tournament/home-view'
-import { ScoringView } from '@/components/tournament/scoring-view'
 import { ScoreboardView } from '@/components/tournament/scoreboard-view'
 import { OverviewView } from '@/components/tournament/manage/overview-view'
 import { CentersView } from '@/components/tournament/manage/centers-view'
@@ -76,7 +75,6 @@ export function TournyApp({ route, variant = '' }: { route: AppRoute; variant?: 
     <MotionConfig reducedMotion="user">
       <AppShell variant={variant}>
         {view === 'home' ? <HomeView /> : null}
-        {view === 'scoring' ? <ScoringView /> : null}
         {view === 'overview' ? <OverviewView /> : null}
         {view === 'centers' ? <CentersView /> : null}
         {view === 'students' ? <StudentsView /> : null}

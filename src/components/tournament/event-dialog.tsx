@@ -101,10 +101,9 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
         studentScoreIds.has(event.id))
   )
 
-  // Which console this dialog shows — the same mode switch as the
-  // scoring console, so marks can be entered right from the
-  // overview's bird's-eye matrix. Locked to the mark sheet once
-  // student marks exist.
+  // Which console this dialog shows — marks can be entered right
+  // from the overview's bird's-eye matrix. Locked to the mark sheet
+  // once student marks exist.
   const [scoreMode, setScoreMode] = useState<'podium' | 'students'>(() =>
     isStudentEvent ? 'students' : 'podium'
   )
@@ -357,10 +356,9 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
             </div>
           ) : null}
 
-          {/* How this event is scored — the same mode switch as the
-              scoring console, so student marks can be entered right
-              here from the overview. Locked to the mark sheet once
-              marks exist. */}
+          {/* How this event is scored — marks can be entered right
+              here from the overview's bird's-eye matrix. Locked to
+              the mark sheet once marks exist. */}
           {session ? (
             <div className="flex gap-1 rounded-lg border bg-muted/30 p-1" role="tablist" aria-label="Scoring mode">
               <button
@@ -654,7 +652,7 @@ export function EventDialog({ event, onClose }: EventDialogProps) {
             <AlertDialogDescription>
               {event.result || hasMarks
                 ? `It holds a recorded result${hasMarks ? ' and student marks' : ''} — removing it deletes them, and the standings and progress recompute immediately.`
-                : 'It has no recorded result. It will disappear from the matrix and the scoring console.'}
+                : 'It has no recorded result. It will disappear from the matrix.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

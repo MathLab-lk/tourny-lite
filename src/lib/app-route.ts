@@ -6,11 +6,16 @@ import type { View } from '@/store/app-store'
  * restored with the browser's back button:
  *
  *   /                   → Tournaments (home)
- *   /t/{id}             → a tournament's Overview
- *   /t/{id}/scoring     → Scoring
+ *   /t/{id}             → a tournament's Overview (the bird's-eye
+ *                        event matrix — results are recorded right
+ *                        from its event dialogs)
  *   /t/{id}/centers     → Centers
+ *   /t/{id}/students    → Students (registration + ranking)
  *   /t/{id}/history     → History
  *   /t/{id}/settings    → Settings (admins)
+ *
+ * Legacy /t/{id}/scoring links (the retired field console) land on
+ * the Overview — its event dialog carries the same recording flows.
  *
  * The public guest scoreboard lives outside this model at
  * /present/{id} — a standalone page with no app chrome and no
@@ -22,7 +27,6 @@ export type AppRoute = { view: 'home' } | { view: TournamentView; tid: string }
 
 const VIEW_SEGMENTS: readonly TournamentView[] = [
   'overview',
-  'scoring',
   'centers',
   'students',
   'history',
@@ -37,6 +41,9 @@ export function parseAppRoute(slug: string[]): AppRoute | null {
   const tid = slug[1]
   if (!tid) return null
   if (slug.length === 2) return { view: 'overview', tid }
+  // The retired Scoring console consolidated into the Overview —
+  // keep its old links working.
+  if (slug[2] === 'scoring') return { view: 'overview', tid }
   const view = slug[2] as TournamentView
   if (!VIEW_SEGMENTS.includes(view)) return null
   return { view, tid }

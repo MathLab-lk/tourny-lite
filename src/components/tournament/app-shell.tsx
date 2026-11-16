@@ -6,7 +6,6 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   ChevronDown,
   ChevronLeft,
-  ClipboardCheck,
   FlaskConical,
   GraduationCap,
   History,
@@ -66,7 +65,6 @@ interface NavItem {
 
 const PRIMARY_NAV: NavItem[] = [
   { key: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { key: 'scoring', label: 'Scoring', icon: ClipboardCheck },
   { key: 'history', label: 'History', icon: History },
 ]
 
@@ -371,15 +369,6 @@ export function AppShell({ children, variant = '' }: { children: ReactNode; vari
               label="Overview"
               active={view === 'overview'}
               onClick={() => go('overview')}
-            />
-          ) : null}
-          {hasTournament ? (
-            <TabLink
-              key="scoring"
-              icon={ClipboardCheck}
-              label="Scoring"
-              active={view === 'scoring'}
-              onClick={() => go('scoring')}
             />
           ) : null}
         </AnimatePresence>

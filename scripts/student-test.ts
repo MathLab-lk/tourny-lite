@@ -1,18 +1,27 @@
 /**
- * Tourny Lite — student rankings test suite (experimental feature).
+ * Tourny Lite — student rankings test suite.
  *
  * Runs against the live dev server (http://localhost:3000) and
- * exercises the student feature end to end: roster management and
- * role enforcement, mark sheet recording with the derived center
- * podium (per-center sums → fixed place points), the student
- * ranking and its tie-breaks, corrections with mandatory
- * justification, re-derivation after roster changes, reset, and a
- * regression pass over the classic podium flow.
+ * exercises the student feature end to end: the ID pattern engine
+ * (pure), the registration stage (name + center + grade → issued
+ * studentCode, unique per tournament, stable forever), roster
+ * management and role enforcement, mark sheet recording with the
+ * derived center podium (per-center sums → fixed place points), the
+ * student ranking and its tie-breaks, corrections with mandatory
+ * justification, re-derivation after roster changes, one center
+ * sweeping several podium places, reset, and a regression pass over
+ * the classic podium flow.
  *
  * Usage: bun run scripts/student-test.ts   (server must be running)
  */
 
-// Module scope — keeps these helpers out of the shared scripts program.
+import {
+  idIndexScope,
+  nextIndexInScope,
+  renderStudentCode,
+  validateIdPattern,
+} from '../src/lib/student-math'
+
 export {}
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:3000'
@@ -73,6 +82,36 @@ const judge = new Client()
 
 async function main() {
   console.log(`Tourny Lite student test — target ${BASE}`)
+
+  // ═══ 0. ID pattern engine (pure functions) ═══
+  section('0 · ID pattern engine')
+  {
+    ok('default pattern validates', validateIdPattern('{center}-{grade}-{index}') === null)
+    ok('empty pattern rejected', validateIdPattern('') !== null)
+    ok('token-less pattern rejected', validateIdPattern('abc') !== null)
+    ok('unknown token rejected', validateIdPattern('{grade}-{bogus}') !== null)
+    ok('index width token accepted', validateIdPattern('{index3}') === null)
+
+    const code = renderStudentCode('{center}-{grade}-{index}', {
+      name: 'Kasun Perera',
+      centerCode: '402',
+      grade: '8',
+      index: 7,
+    })
+    ok('renders center-grade-index', code === '402-8-07', code)
+    ok('sanitizes noisy tokens', renderStudentCode('{center}', { name: 'x', centerCode: '40 2-a', grade: '', index: 1 }) === '402A')
+    ok('zero-pads to the requested width', renderStudentCode('{grade}-{index3}', { name: 'x', centerCode: null, grade: '6', index: 4 }) === '6-004')
+    ok('initials and year render', /KP-\d{4}/.test(renderStudentCode('{initials}-{year}', { name: 'Kasun Perera', centerCode: null, grade: '', index: 1 })))
+
+    ok('index scopes by the tokens present', idIndexScope('{center}-{grade}-{index}') === 'center-grade' && idIndexScope('{center}-{index}') === 'center' && idIndexScope('{grade}-{index}') === 'grade' && idIndexScope('{index}') === 'global')
+    const roster = [
+      { studentCode: '6-01', centerId: 'c1', grade: '6' },
+      { studentCode: null, centerId: 'c1', grade: '6' }, // legacy — not counted
+      { studentCode: '6-02', centerId: 'c2', grade: '6' },
+      { studentCode: '7-01', centerId: 'c1', grade: '7' },
+    ]
+    ok('next index counts coded students in scope', nextIndexInScope('{grade}-{index}', roster, { centerId: 'c1', grade: '6' }) === 3 && nextIndexInScope('{grade}-{index}', roster, { centerId: 'c9', grade: '7' }) === 2)
+  }
 
   // ═══ 1. First-run setup / sign-in ═══
   section('1 · Accounts')
@@ -137,6 +176,7 @@ async function main() {
     ok('detail exposes students array', Array.isArray(detail.data?.students) && detail.data.students.length === 0, detail.data?.students)
     ok('detail exposes studentScores array', Array.isArray(detail.data?.studentScores))
     ok('detail exposes studentStandings array', Array.isArray(detail.data?.studentStandings))
+    ok('tournament carries the default ID pattern', detail.data?.tournament?.studentIdPattern === '{center}-{grade}-{index}', detail.data?.tournament?.studentIdPattern)
     ok('events default to podium scoring mode', detail.data?.events?.every((e: any) => e.scoringMode === 'podium'))
 
     const events: any[] = detail.data.events ?? []
@@ -145,48 +185,90 @@ async function main() {
     ok('found a student-scored event slot and a podium event slot', Boolean(eventStudent) && Boolean(eventPodium))
   }
 
-  // ═══ 3. Roster management & role enforcement ═══
-  section('3 · Roster management & roles')
+  // ═══ 3. Registration stage: issued IDs, roles, on-the-go roster ═══
+  section('3 · Registration stage (IDs, roles)')
   let students: any[] = []
   {
+    const detail0 = await guest.call('GET', `/api/tournaments/${tid}`)
+    const centers0: any[] = detail0.data.centers
+    const c401 = centers0.find((c: any) => c.centerCode === '401')
+    const c402 = centers0.find((c: any) => c.centerCode === '402')
+    const c403 = centers0.find((c: any) => c.centerCode === '403')
+
     const denied = await guest.call('POST', `/api/tournaments/${tid}/students`, {
-      students: [{ name: 'Ghost Student' }],
+      students: [{ name: 'Ghost Student', centerId: c401.id, grade: '6' }],
     })
-    ok('guests cannot add students', denied.status === 401, denied)
+    ok('guests cannot register students', denied.status === 401, denied)
 
     const empty = await admin.call('POST', `/api/tournaments/${tid}/students`, { students: [] })
-    ok('empty roster batch rejected', empty.status === 400, empty)
+    ok('empty registration batch rejected', empty.status === 400, empty)
 
-    const added = await admin.call('POST', `/api/tournaments/${tid}/students`, {
-      students: [
-        { name: 'Amara Silva' }, // center assigned below (on the go)
-        { name: 'Nimal Fernando' },
-        { name: 'Kasun Perera' },
-        { name: 'Same Name' },
-        { name: 'Dilini Rajapaksa' },
-        { name: 'Same Name' }, // deliberate duplicate name, different person
-        { name: 'Tharindu Dias' },
-      ],
+    const noCenter = await admin.call('POST', `/api/tournaments/${tid}/students`, {
+      students: [{ name: 'No Center', grade: '6' }],
     })
-    ok('adds students without centers', added.status === 201 && added.data?.added === 7, added)
-    students = added.data?.students ?? []
-    ok('every student has a distinct internal id', new Set(students.map((s: any) => s.id)).size === 7)
+    ok('a pattern with {center} requires a center', noCenter.status === 400, noCenter)
 
-    const byName = (name: string) => students.filter((s: any) => s.name === name)
-    ok('two students may share a name', byName('Same Name').length === 2)
+    const noGrade = await admin.call('POST', `/api/tournaments/${tid}/students`, {
+      students: [{ name: 'No Grade', centerId: c401.id }],
+    })
+    ok('a pattern with {grade} requires a grade', noGrade.status === 400, noGrade)
 
     const badCenter = await admin.call('POST', `/api/tournaments/${tid}/students`, {
-      students: [{ name: 'Wrong Center', centerId: 'not-a-center' }],
+      students: [{ name: 'Wrong Center', centerId: 'not-a-center', grade: '6' }],
     })
     ok('rejects a center that does not exist', badCenter.status === 400 || badCenter.status === 404, badCenter)
 
-    // Assign centers on the go (admin PATCH) — the "data arrives later" flow.
-    const detail = await guest.call('GET', `/api/tournaments/${tid}`)
-    const centers: any[] = detail.data.centers
-    const c401 = centers.find((c: any) => c.centerCode === '401')
-    const c402 = centers.find((c: any) => c.centerCode === '402')
-    const c403 = centers.find((c: any) => c.centerCode === '403')
+    const badPattern = await admin.call('PATCH', `/api/tournaments/${tid}`, {
+      studentIdPattern: '{grade}-{bogus}',
+    })
+    ok('unknown pattern tokens rejected', badPattern.status === 400, badPattern)
 
+    // Switch to a center-free pattern so the "roster before centers"
+    // flow (student lists arriving late) stays exercisable.
+    const rePattern = await admin.call('PATCH', `/api/tournaments/${tid}`, {
+      studentIdPattern: '{grade}-{index}',
+    })
+    ok('admin re-configures the ID pattern', rePattern.status === 200, rePattern)
+
+    const added = await admin.call('POST', `/api/tournaments/${tid}/students`, {
+      students: [
+        { name: 'Amara Silva', grade: '6' },
+        { name: 'Nimal Fernando', grade: '6' },
+        { name: 'Kasun Perera', grade: '7' },
+        { name: 'Same Name', grade: '6' },
+        { name: 'Dilini Rajapaksa', grade: '8' },
+        { name: 'Same Name', grade: '7' }, // deliberate duplicate name, different person
+        { name: 'Tharindu Dias', grade: '6' },
+      ],
+    })
+    ok('registers students and issues IDs', added.status === 201 && added.data?.added === 7, added)
+    students = added.data?.students ?? []
+    ok(
+      'every registration returns a studentCode',
+      students.length === 7 && students.every((s: any) => typeof s.studentCode === 'string' && s.studentCode.length > 0),
+      students.map((s: any) => s.studentCode)
+    )
+    ok('issued IDs are unique', new Set(students.map((s: any) => s.studentCode)).size === 7)
+    ok(
+      'IDs follow the active {grade}-{index} pattern',
+      students.every((s: any) => new RegExp(`^${s.grade}-\\d{2}$`).test(s.studentCode)),
+      students.map((s: any) => s.studentCode)
+    )
+    ok(
+      'indexes number within each grade scope',
+      students.find((s: any) => s.name === 'Amara Silva')?.studentCode === '6-01' &&
+        students.find((s: any) => s.name === 'Dilini Rajapaksa')?.studentCode === '8-01' &&
+        students.filter((s: any) => s.grade === '7').every((s: any) => /^7-0[12]$/.test(s.studentCode)),
+      students.map((s: any) => s.studentCode)
+    )
+
+    const byName = (name: string) => students.filter((s: any) => s.name === name)
+    ok(
+      'two students may share a name — their IDs differ',
+      byName('Same Name').length === 2 && byName('Same Name')[0].studentCode !== byName('Same Name')[1].studentCode
+    )
+
+    // Assign centers on the go (admin PATCH) — the "data arrives later" flow.
     const amara = byName('Amara Silva')[0]
     const nimal = byName('Nimal Fernando')[0]
     const kasun = byName('Kasun Perera')[0]
@@ -195,8 +277,14 @@ async function main() {
     const sameUnassigned = byName('Same Name')[1]
     const tharindu = byName('Tharindu Dias')[0]
 
+    const amaraMove = await admin.call('PATCH', `/api/tournaments/${tid}/students`, {
+      studentId: amara.id,
+      centerId: c401.id,
+      grade: '6',
+    })
+    ok('assigning a center keeps the issued ID stable', amaraMove.status === 200 && amaraMove.data?.student?.studentCode === amara.studentCode, amaraMove.data?.student)
+
     const assignments = [
-      [amara, c401],
       [nimal, c401],
       [kasun, c402],
       [sameIn402, c402],
@@ -226,10 +314,20 @@ async function main() {
     const judgeAdd = await judge.call('POST', `/api/tournaments/${tid}/students`, {
       name: 'Judge Added',
       centerId: c401.id,
+      grade: '6',
     })
-    ok('judges can add students in the field', judgeAdd.status === 201, judgeAdd)
+    ok('judges can register students in the field', judgeAdd.status === 201, judgeAdd)
+    ok(
+      'a later registration continues the sequence (no reused numbers)',
+      judgeAdd.data?.students?.[0]?.studentCode === '6-05',
+      judgeAdd.data?.students
+    )
     students = (await guest.call('GET', `/api/tournaments/${tid}`)).data.students
     ok('roster reflects 8 students', students.length === 8)
+    ok(
+      'roster exposes IDs and grades',
+      students.every((s: any) => (s.studentCode === null || typeof s.studentCode === 'string') && typeof s.grade === 'string')
+    )
   }
 
   // ═══ 4. Mark sheet: derived podium & standings ═══
@@ -426,6 +524,25 @@ async function main() {
           })
           ok('manual podium allowed after reset', manualOk.status === 201, manualOk)
 
+          // A dominant center may hold TWO places in one event —
+          // each place pays its own points (the historical bug).
+          const sweep = await judge.call('POST', '/api/results', {
+            eventId: eventStudent,
+            firstPlaceCenterId: c403.id,
+            secondPlaceCenterId: c403.id,
+            thirdPlaceCenterId: c401.id,
+            recordedBy: 'Field Judge',
+            reason: 'One center swept 1st and 2nd',
+          })
+          ok('one center may take two podium places', sweep.status === 200, sweep)
+          const sweepDetail = await guest.call('GET', `/api/tournaments/${tid}`)
+          const sweepRow = sweepDetail.data.standings.find((r: any) => r.centerCode === '403')
+          ok(
+            'a sweep pays both place points (75 + 50)',
+            sweepRow?.total === 125 && sweepRow?.gold === 1 && sweepRow?.silver === 1,
+            sweepRow
+          )
+
           // Classic podium flow on the untouched event.
           const classic = await judge.call('POST', '/api/results', {
             eventId: eventPodium,
@@ -449,7 +566,7 @@ async function main() {
     const studentsPage = await fetch(`${BASE}/t/${tid}/students`)
     ok('/t/{id}/students renders', studentsPage.status === 200)
     const scoringPage = await fetch(`${BASE}/t/${tid}/scoring`)
-    ok('/t/{id}/scoring still renders', scoringPage.status === 200)
+    ok('/t/{id}/scoring (retired console) lands on the Overview with 200', scoringPage.status === 200)
     const present = await fetch(`${BASE}/present/${tid}`)
     ok('guest scoreboard still renders', present.status === 200)
     const bogus = await fetch(`${BASE}/t/${tid}/not-a-view`)

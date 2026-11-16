@@ -37,6 +37,8 @@ export interface TournamentDTO {
   pointsFirst: number
   pointsSecond: number
   pointsThird: number
+  /** How registered student IDs are composed, e.g. "{center}-{grade}-{index}" */
+  studentIdPattern: string
   templateId: string | null
   createdAt: string
   updatedAt: string
@@ -70,6 +72,9 @@ export interface CenterDTO {
 export interface StudentDTO {
   id: string
   name: string
+  /** Human-readable field reference issued at registration (e.g. "402-8-07"), unique per tournament. */
+  studentCode: string | null
+  grade: string | null
   centerId: string | null
   centerCode: string | null
   createdAt: string
@@ -96,6 +101,8 @@ export interface StudentStandingRow {
   rank: number
   studentId: string
   name: string
+  studentCode: string | null
+  grade: string | null
   centerId: string | null
   centerCode: string | null
   /** number of scored events this student participated in */
@@ -241,6 +248,7 @@ export interface ResultSubmitPayload {
 export interface StudentInput {
   name: string
   centerId?: string | null
+  grade?: string | null
 }
 
 export interface StudentScoresSubmitPayload {
