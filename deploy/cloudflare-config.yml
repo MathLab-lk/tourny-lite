@@ -9,12 +9,22 @@
 # credentials-file: /root/.cloudflared/<YOUR-TUNNEL-UUID>.json
 #
 # ingress:
-#   # Tournament Web App subdomain
+#   # Tournament Web App subdomain → STABLE slot (deploy/deploy.sh)
 #   - hostname: tournament.yourdomain.com
 #     service: http://127.0.0.1:8090
 #     originRequest:
 #       noTLSVerify: true
 #       connectTimeout: 10s
+#
+#   # OPTIONAL — DEV slot. Prefer keeping dev private via an SSH tunnel:
+#   #   ssh -L 8091:127.0.0.1:8091 <vm>   →  http://localhost:8091
+#   # To expose it publicly instead, uncomment (use an unguessable hostname
+#   # and Cloudflare Access if possible — dev runs unreleased code):
+#   # - hostname: tournament-dev.yourdomain.com
+#   #   service: http://127.0.0.1:8091
+#   #   originRequest:
+#   #     noTLSVerify: true
+#   #     connectTimeout: 10s
 #
 #   # Default fallback for unmapped traffic
 #   - service: http_status:404

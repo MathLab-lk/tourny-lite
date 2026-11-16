@@ -29,8 +29,15 @@ server.log
 .env.*
 !**/.env.example
 
-# Persistent data volume used by docker compose
+# Persistent data volumes used by docker compose
 deploy/data
+deploy/data-stable
+deploy/data-dev
+
+# Deployment runtime state (worktree build contexts, secrets, backups)
+deploy/worktrees
+deploy/env
+deploy/backups
 
 # Version control & editor state
 .git

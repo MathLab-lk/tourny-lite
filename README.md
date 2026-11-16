@@ -176,10 +176,11 @@ dialog shows both tabs (*Center podium* / *Student marks*).
 - **Offline field entry** — mark sheets queue on the device and sync
   automatically, exactly like podium results.
 
-This feature ships on the `feature/student-rankings` branch and is meant
-to run as a separate experimental deployment (see
-[deploy/README.md](deploy/README.md) — *Experimental build*) so the stable
-container is never disturbed.
+This feature ships on the `feature/student-rankings` branch. On the VM it
+runs as the **dev slot** of the two-slot deployment — its own worktree,
+container, port (`127.0.0.1:8091`), database and session cookie — so the
+stable container is never disturbed (see
+[deploy/README.md](deploy/README.md)).
 
 ### Invitation codes
 
@@ -342,13 +343,13 @@ the bundled WAHA mock, so no real group is messaged while testing.
 
 ## Deployment
 
-Single Docker container with an embedded database, tuned for small VMs
-(~80–150 MB RAM, hard 512 MB cap), exposed through Cloudflare Tunnel or
-any reverse proxy:
+Self-contained Docker containers with an embedded database, tuned for small
+VMs (~80–150 MB RAM per slot, hard 512 MB cap). One repo folder runs TWO
+slots — a stable release and a dev build, each from its own branch:
 
 ```bash
-export AUTH_SECRET="$(openssl rand -hex 32)"
-docker compose -f deploy/docker-compose.yml up -d --build
+./deploy/deploy.sh setup            # first time: worktrees, secrets, build, start
+./deploy/deploy.sh update stable    # rebuild one slot from its branch
 ```
 
 See [deploy/README.md](deploy/README.md) for the full runbook.
@@ -371,5 +372,5 @@ scripts/                 Battle test suite + demo seeder
 | `DATABASE_URL` | SQLite file path, e.g. `file:./db/custom.db` |
 | `AUTH_SECRET` | Secret used to sign session cookies — use a long random value in production |
 | `PUBLIC_BASE_URL` | Optional: public address used for guest links in shared messages (defaults to the request's host) |
-| `SESSION_COOKIE_NAME` | Optional: session cookie name — the experimental build sets `tourny_session_exp` so it never fights the stable build over the browser cookie |
-| `APP_VARIANT` | Optional: set to `experimental` to badge the UI with an amber "Exp" chip (used by the experimental compose file) |
+| `SESSION_COOKIE_NAME` | Optional: session cookie name — the dev slot of the two-slot deployment sets `tourny_session_dev` so `:8090` and `:8091` never fight over the browser cookie (cookies are scoped by domain, not port) |
+| `APP_VARIANT` | Optional: set to `experimental` to badge the UI with an amber "Exp" chip (used by the dev slot in `deploy/docker-compose.yml`) |
