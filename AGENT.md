@@ -148,7 +148,7 @@ docker build context:
   dependency — pre-existing, ignore it, don't "fix" it.
 - No docker in the dev sandbox: dry-run deploy tooling with the stub
   CLI pattern (`scripts/stub/docker` + `scripts/deploy-dryrun.sh`,
-  57 assertions) and structural YAML checks
+  70 assertions) and structural YAML checks
   (`scripts/deploy-compose-check.py`).
 - SQLite in WAL mode: never `cp` the db files without checkpointing.
 
