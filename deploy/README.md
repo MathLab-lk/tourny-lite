@@ -176,6 +176,26 @@ neither exists locally nor as `origin/<branch>`. Fix the branch names in
 `deploy/deploy.env` / `deploy/deploy.local.env`, or push the branch and
 re-run (the script prints every branch it can see).
 
+**`Bind for 127.0.0.1:8091 failed: port is already allocated`** — another
+container already publishes that port. `setup` / `update` / `up` now stop
+**before building** and name the culprit. The usual suspect is the retired
+experimental build (`docker-compose.experimental.yml`, container
+`tourny-lite-exp`): the dev slot replaces it — same branch and port, plus
+its own session cookie — so retire it:
+
+```bash
+docker ps --filter publish=8091 --format 'table {{.Names}}\t{{.Ports}}'
+docker rm -f tourny-lite-exp          # the dev slot takes over 8091
+
+# to carry the experimental build's data onto the dev slot first:
+docker compose -f deploy/docker-compose.yml stop dev
+rm -rf deploy/data-dev && mv deploy/data-experimental deploy/data-dev
+```
+
+Port 8090 (`stable`) can hit the same error if the old single-container
+`tourny-lite` is still running — see
+[Migration](#migration-from-the-old-single-container-setup).
+
 **`leftover directory … is not a registered git worktree`** — a previous
 worktree was removed by hand. Fix exactly as printed:
 `rm -rf deploy/worktrees/<slot>`, then re-run the command.

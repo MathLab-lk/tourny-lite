@@ -108,6 +108,10 @@ docker build context:
 
 - Branch config: `deploy/deploy.local.env` (gitignored, wins) > env vars
   > `deploy/deploy.env` (committed defaults).
+- `setup` / `update` / `up` pre-flight the slot ports (8090/8091): a
+  foreign container already publishing a port stops the run before any
+  build, naming the culprit (usually the retired `tourny-lite-exp`
+  experimental build — the dev slot replaces it).
 - The dev slot sets `SESSION_COOKIE_NAME=tourny_session_dev` and
   `APP_VARIANT=experimental` (amber Exp badge). Cookies are scoped by
   **domain, not port** — never remove the separate cookie name, or

@@ -196,6 +196,45 @@ checkpoint_slot() {
   fi
 }
 
+# A foreign container already publishing a slot's host port would make
+# `compose up` fail halfway (one slot up, the other dead). Detect it BEFORE
+# building anything and name the culprit.
+port_squatter() { # slot -> first foreign container publishing its host port
+  local port own
+  port="$(slot_port "$1")"
+  own="$(slot_container "$1")"
+  # `|| true`: an empty result is the healthy case — without it, grep's
+  # non-match status would silently kill the script under `set -e pipefail`.
+  docker ps --filter "publish=$port" --format '{{.Names}}' 2>/dev/null \
+    | grep -v -x "$own" | head -1 || true
+}
+
+# Extra remediation when the squatter is the retired experimental build
+# (docker-compose.experimental.yml ran on 8091 with container tourny-lite-exp).
+exp_hint() {
+  case "$1" in
+    tourny-lite-exp*|*experimental*)
+      printf '%s\n' "" \
+        "'$1' looks like the retired EXPERIMENTAL build — the dev slot replaces it" \
+        "(same branch and port, plus its own session cookie). Its database lives in" \
+        "deploy/data-experimental; to carry it onto the dev slot:" \
+        "  docker compose -f deploy/docker-compose.yml stop dev" \
+        "  rm -rf deploy/data-dev && mv deploy/data-experimental deploy/data-dev" \
+        "then:  docker rm -f '$1'  and re-run this command."
+      ;;
+  esac
+}
+
+check_slot_ports() { # slots... — die early if a foreign container holds a slot port
+  local slot squatter
+  for slot in "$@"; do
+    squatter="$(port_squatter "$slot")"
+    [ -z "$squatter" ] && continue
+    die "port $(slot_port "$slot") is already published by container '$squatter' — the '$slot' slot cannot start.
+Free it first:  docker rm -f '$squatter'$(exp_hint "$squatter")"
+  done
+}
+
 # ---------------------------------------------------------------- commands
 cmd_setup() {
   require_docker
@@ -215,6 +254,21 @@ To keep that data on the stable slot, stop and move it first:
     warn "the old container 'tourny-lite' still exists — remove it after migrating:
   docker rm -f tourny-lite"
   fi
+
+  # Leftovers from the retired experimental build (docker-compose.experimental.yml).
+  if docker ps -a --filter 'name=^tourny-lite-exp' --format '{{.Names}}' 2>/dev/null | grep -q .; then
+    warn "an old EXPERIMENTAL build container still exists — the dev slot replaces it:
+  docker rm -f tourny-lite-exp"
+  fi
+  if [ -d "$DEPLOY_DIR/data-experimental" ] && [ ! -d "$(slot_data dev)" ]; then
+    warn "found deploy/data-experimental (the old experimental build's database).
+To carry it onto the dev slot:
+  mv deploy/data-experimental deploy/data-dev"
+  fi
+
+  # Fail fast if a foreign container (e.g. the experimental build) already
+  # publishes a slot port — before spending minutes building images.
+  check_slot_ports stable dev
 
   fetch_origin
   local slot
@@ -244,6 +298,7 @@ cmd_update() {
   require_docker
   local slots slot
   slots="$(expand_slots "${1:-all}")"
+  check_slot_ports $slots
   fetch_origin
   for slot in $slots; do
     ensure_env_file "$slot"
@@ -259,6 +314,7 @@ cmd_up() {
   require_docker
   local slots slot
   slots="$(expand_slots "${1:-all}")"
+  check_slot_ports $slots
   for slot in $slots; do
     ensure_env_file "$slot"
     [ -d "$(slot_worktree "$slot")" ] || sync_slot "$slot"

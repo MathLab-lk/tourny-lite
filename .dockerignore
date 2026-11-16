@@ -33,6 +33,7 @@ server.log
 deploy/data
 deploy/data-stable
 deploy/data-dev
+deploy/data-experimental
 
 # Deployment runtime state (worktree build contexts, secrets, backups)
 deploy/worktrees
