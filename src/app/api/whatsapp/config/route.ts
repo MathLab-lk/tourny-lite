@@ -54,6 +54,9 @@ export async function PUT(req: NextRequest) {
     if (typeof body.baseUrl === 'string') patch.baseUrl = body.baseUrl
     if (typeof body.publicBaseUrl === 'string') patch.publicBaseUrl = body.publicBaseUrl
     if (typeof body.apiKey === 'string') patch.apiKey = body.apiKey
+    if (body.clearApiKey === true) patch.clearApiKey = true
+    if (typeof body.username === 'string') patch.username = body.username
+    if (typeof body.password === 'string') patch.password = body.password
     if (typeof body.session === 'string') patch.session = body.session
     if (typeof body.groupChatId === 'string') patch.groupChatId = body.groupChatId
     if (typeof body.groupName === 'string') patch.groupName = body.groupName

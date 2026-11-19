@@ -10,6 +10,9 @@ import type {
   InviteDTO,
   ResultSubmitPayload,
   SessionUserDTO,
+  StudentDTO,
+  StudentInput,
+  StudentScoresSubmitPayload,
   TournamentDetailDTO,
   TournamentSummaryDTO,
 } from '@/lib/types'
@@ -17,13 +20,21 @@ import type {
 export type View =
   | 'home'
   | 'overview'
-  | 'scoring'
   | 'centers'
+  | 'students'
   | 'history'
   | 'settings'
-export type PrintMode = 'progress' | null
+export type PrintMode = 'progress' | 'students' | null
 
 const queueKey = (tid: string) => `tourny_lite_queue_${tid}`
+
+/** Offline submissions are queued on the device until the
+ *  connection / session returns. Both scoring modes queue the same
+ *  way; entries written before student marks existed have no kind
+ *  and are normalized to podium payloads on read. */
+type QueuedSubmission =
+  | { kind: 'podium'; payload: ResultSubmitPayload }
+  | { kind: 'students'; payload: StudentScoresSubmitPayload }
 
 /** Error carrying the HTTP status so callers can branch on 401/403/404. */
 class ApiError extends Error {
@@ -44,16 +55,25 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return body
 }
 
-function readQueue(tid: string): ResultSubmitPayload[] {
+function readQueue(tid: string): QueuedSubmission[] {
   if (typeof window === 'undefined') return []
   try {
-    return JSON.parse(window.localStorage.getItem(queueKey(tid)) ?? '[]') as ResultSubmitPayload[]
+    const raw = JSON.parse(window.localStorage.getItem(queueKey(tid)) ?? '[]') as unknown
+    if (!Array.isArray(raw)) return []
+    return raw.map((item) => {
+      const q = item as Partial<QueuedSubmission> & Partial<ResultSubmitPayload>
+      if (q && (q as { kind?: string }).kind === 'students') {
+        return { kind: 'students', payload: q.payload as StudentScoresSubmitPayload }
+      }
+      // Legacy entries (pre-student-marks) are bare podium payloads.
+      return { kind: 'podium', payload: q as ResultSubmitPayload }
+    })
   } catch {
     return []
   }
 }
 
-function writeQueue(tid: string, queue: ResultSubmitPayload[]) {
+function writeQueue(tid: string, queue: QueuedSubmission[]) {
   if (typeof window === 'undefined') return
   window.localStorage.setItem(queueKey(tid), JSON.stringify(queue))
   window.dispatchEvent(new CustomEvent('tourny-queue-changed', { detail: tid }))
@@ -131,8 +151,35 @@ interface AppState {
   deleteTournament: (id: string) => Promise<boolean>
   updateTournament: (id: string, patch: Record<string, unknown>) => Promise<boolean>
   submitResult: (payload: ResultSubmitPayload) => Promise<{ ok: boolean; queued: boolean; error?: string }>
+  submitStudentScores: (
+    payload: StudentScoresSubmitPayload
+  ) => Promise<{ ok: boolean; queued: boolean; error?: string }>
+  registerStudents: (inputs: StudentInput[]) => Promise<{ ok: boolean; students?: StudentDTO[]; error?: string }>
+  backfillStudentCodes: () => Promise<{ ok: boolean; issued?: number; error?: string }>
+  updateStudent: (
+    studentId: string,
+    patch: { name?: string; centerId?: string | null; grade?: string | null }
+  ) => Promise<{ ok: boolean; error?: string }>
+  removeStudent: (studentId: string) => Promise<{ ok: boolean; error?: string }>
   resetResult: (eventId: string, reason: string) => Promise<boolean>
+  undoReset: (eventId: string) => Promise<{ ok: boolean; error?: string; restoredScores?: number }>
   setEventStatus: (eventId: string, status: string) => Promise<boolean>
+  /** Adds event slots (and optionally a new category/game inline). */
+  addEvents: (input: {
+    divisionId?: string
+    newDivision?: { code: string; name: string; ageRange?: string; gradeRange?: string }
+    gameId?: string
+    newGame?: { englishName: string; sinhalaName?: string; rulesSummary?: string }
+    count?: number
+    scoringMode?: 'podium' | 'students'
+  }) => Promise<{ ok: boolean; added?: number; error?: string }>
+  /** Edits an event slot: label, scoring mode (clean slots only) or status. */
+  updateEvent: (
+    eventId: string,
+    patch: { label?: string; scoringMode?: 'podium' | 'students'; status?: string }
+  ) => Promise<{ ok: boolean; error?: string }>
+  /** Removes an event slot and everything recorded on it. */
+  deleteEvent: (eventId: string) => Promise<{ ok: boolean; error?: string }>
   sendWhatsApp: (
     kind: 'test' | 'standings' | 'event',
     opts?: { tournamentId?: string; eventId?: string }
@@ -534,12 +581,111 @@ export const useAppStore = create<AppState>((set, get) => ({
         // Network down or session expired — keep the result on this device
         // and sync it once the connection / session is restored.
         const queue = readQueue(tid)
-        queue.push(payload)
+        queue.push({ kind: 'podium', payload })
         writeQueue(tid, queue)
         return { ok: true, queued: true }
       }
       const message = err instanceof Error ? err.message : 'Failed to submit result'
       return { ok: false, queued: false, error: message }
+    }
+  },
+
+  submitStudentScores: async (payload) => {
+    const tid = get().activeTournamentId
+    try {
+      await api('/api/results/students', { method: 'POST', body: JSON.stringify(payload) })
+      await Promise.all([get().refreshActive(), get().loadTournaments()])
+      return { ok: true, queued: false }
+    } catch (err) {
+      const offline = err instanceof TypeError
+      const unauthenticated = err instanceof ApiError && err.status === 401
+      if ((offline || unauthenticated) && tid) {
+        // Mark sheets queue offline exactly like podium results.
+        const queue = readQueue(tid)
+        queue.push({ kind: 'students', payload })
+        writeQueue(tid, queue)
+        return { ok: true, queued: true }
+      }
+      const message = err instanceof Error ? err.message : 'Failed to submit student marks'
+      return { ok: false, queued: false, error: message }
+    }
+  },
+
+  // ── Students (registration + rankings) ─────────────
+
+  registerStudents: async (inputs) => {
+    const tid = get().activeTournamentId
+    if (!tid) return { ok: false, error: 'No tournament selected' }
+    try {
+      const out = await api<{ added: number; students: StudentDTO[] }>(
+        `/api/tournaments/${tid}/students`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ students: inputs }),
+        }
+      )
+      await Promise.all([get().refreshActive(), get().loadTournaments()])
+      return { ok: true, students: out.students }
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Could not register the students',
+      }
+    }
+  },
+
+  /** Issues IDs to legacy students registered before the
+   *  registration stage existed (admin only). */
+  backfillStudentCodes: async () => {
+    const tid = get().activeTournamentId
+    if (!tid) return { ok: false, error: 'No tournament selected' }
+    try {
+      const out = await api<{ issued: number }>(`/api/tournaments/${tid}/students/backfill`, {
+        method: 'POST',
+      })
+      await get().refreshActive()
+      return { ok: true, issued: out.issued }
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Could not generate the missing IDs',
+      }
+    }
+  },
+
+  updateStudent: async (studentId, patch) => {
+    const tid = get().activeTournamentId
+    if (!tid) return { ok: false, error: 'No tournament selected' }
+    try {
+      await api(`/api/tournaments/${tid}/students`, {
+        method: 'PATCH',
+        body: JSON.stringify({ studentId, ...patch }),
+      })
+      await Promise.all([get().refreshActive(), get().loadTournaments()])
+      return { ok: true }
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Could not update the student',
+      }
+    }
+  },
+
+  removeStudent: async (studentId) => {
+    const tid = get().activeTournamentId
+    if (!tid) return { ok: false, error: 'No tournament selected' }
+    try {
+      await api(`/api/tournaments/${tid}/students`, {
+        method: 'DELETE',
+        body: JSON.stringify({ studentId }),
+      })
+      await get().refreshActive()
+      return { ok: true }
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Could not remove the student',
+      }
     }
   },
 
@@ -549,10 +695,34 @@ export const useAppStore = create<AppState>((set, get) => ({
         method: 'DELETE',
         body: JSON.stringify({ reason }),
       })
-      await Promise.all([get().refreshActive(), get().loadTournaments()])
+      // The audit feed gains the reset entry (with its undo button)
+      // the moment the reset lands — no extra navigation needed.
+      const tid = get().activeTournamentId
+      const jobs: Promise<unknown>[] = [get().refreshActive(), get().loadTournaments()]
+      if (tid) jobs.push(get().loadAudit(tid))
+      await Promise.all(jobs)
       return true
     } catch {
       return false
+    }
+  },
+
+  undoReset: async (eventId) => {
+    try {
+      const out = await api<{ restoredResult: boolean; restoredScores: number }>(
+        `/api/results/${eventId}/undo-reset`,
+        { method: 'POST' }
+      )
+      const tid = get().activeTournamentId
+      const jobs: Promise<unknown>[] = [get().refreshActive(), get().loadTournaments()]
+      if (tid) jobs.push(get().loadAudit(tid))
+      await Promise.all(jobs)
+      return { ok: true, restoredScores: out.restoredScores }
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'The reset could not be undone.',
+      }
     }
   },
 
@@ -563,6 +733,43 @@ export const useAppStore = create<AppState>((set, get) => ({
       return true
     } catch {
       return false
+    }
+  },
+
+  // ── Event slot management (admin) ───────────────────────
+
+  addEvents: async (input) => {
+    const tid = get().activeTournamentId
+    if (!tid) return { ok: false, error: 'No tournament selected' }
+    try {
+      const out = await api<{ added: number }>(`/api/tournaments/${tid}/events`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+      await Promise.all([get().refreshActive(), get().loadTournaments()])
+      return { ok: true, added: out.added }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'The events could not be added.' }
+    }
+  },
+
+  updateEvent: async (eventId, patch) => {
+    try {
+      await api(`/api/events/${eventId}`, { method: 'PATCH', body: JSON.stringify(patch) })
+      await get().refreshActive()
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'The event could not be updated.' }
+    }
+  },
+
+  deleteEvent: async (eventId) => {
+    try {
+      await api(`/api/events/${eventId}`, { method: 'DELETE' })
+      await Promise.all([get().refreshActive(), get().loadTournaments()])
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'The event could not be removed.' }
     }
   },
 
@@ -643,16 +850,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!tid) return
     const queue = readQueue(tid)
     if (queue.length === 0) return
-    const remaining: ResultSubmitPayload[] = []
-    for (const payload of queue) {
+    const remaining: QueuedSubmission[] = []
+    for (const item of queue) {
       try {
-        await api('/api/results', { method: 'POST', body: JSON.stringify(payload) })
+        const url = item.kind === 'students' ? '/api/results/students' : '/api/results'
+        await api(url, { method: 'POST', body: JSON.stringify(item.payload) })
       } catch (err) {
         const offline = err instanceof TypeError
         const unauthenticated = err instanceof ApiError && err.status === 401
         if (offline || unauthenticated) {
           // Still offline or signed out — keep the rest queued.
-          remaining.push(payload)
+          remaining.push(item)
         }
         // Validation errors (other 4xx) are dropped: the event state
         // changed on the server; the operator can re-enter if needed.

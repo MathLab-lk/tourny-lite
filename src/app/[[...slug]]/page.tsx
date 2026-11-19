@@ -19,5 +19,6 @@ export default async function AppPage({
   const { slug } = await params
   const route = parseAppRoute(slug ?? [])
   if (!route) notFound()
-  return <TournyApp route={route} />
+  // APP_VARIANT badges the experimental deployment in the app shell.
+  return <TournyApp route={route} variant={process.env.APP_VARIANT ?? ''} />
 }

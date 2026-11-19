@@ -13,21 +13,42 @@ programmatically; VLM reviews are subjective, this is not):
   - night-sky background gradient (#1A1C25 -> #12131A)
   - glass panels (#2D3345-ish body, top-bright gradient edge,
     specular rim) at their exact layout positions
-  - gold / silver / bronze medal coins, outlined chips, neutral coins
+  - gold / silver / bronze medal coins and pedestals, outlined
+    chips, neutral coins
   - steel-blue progress fill, hairline dividers
   - every text element leaves ink in its expected band
   - no text-like ink beyond the side margins (starfield dots are
     allowed; ink-bright pixels are not)
 
-Event card (with Sinhala subtitle): eyebrow 124, title 188, organizer
-250, hairline 292, game 370, sinhala 428, chips 470..528, podium rows
-564/720/876 h140, strip label 1078 / line 1128, footer divider 1194,
-label 1252, track 1278-1288, wordmark 1336, bottom 1394. With the
-guest link the WATCH LIVE pill sits at 1186..1278 (H 1520).
-Standings rows start 340, h 112, stride 126 (7 rows); footer divider
-1238 (H 1438); live variant pill 1230..1322 (H 1564).
+The two broadcasts carry deliberately different silhouettes — the
+checker pins both:
+
+Event card = the podium. Header: eyebrow 124, game 190, sinhala 248,
+context 300, hairline 346, chips 402..460. Stage panel 490..1114
+(6 centers seeded, full podium): pedestals gold 395..684 x 862..1074
+(h 212), silver 90..379 x 920..1074 (h 154), bronze 710..999 x
+954..1074 (h 120), floor line 1082, coins/identity stacked above
+each pedestal (positions follow the content, so coins are located by
+color scan). Overall line 1168/1218, footer divider 1284 (H 1484);
+live variant: pill 1276..1368, footer divider 1410 (H 1610).
+
+Standings card = the classification table. Masthead: eyebrow 124,
+title 188, organizer 250, hairline 292. One panel 340..1030 with
+header row (labels 384, divider 404) and 6 hairline rows h 104
+(rowtops 406/510/614/718/822/926): medal coin cx 110, identity
+152..640, G/S/B columns 676/754/832, points right-aligned to 986,
+leader gold tab x 69. Footer divider 1060 (H 1260); live variant:
+pill 1052..1144, footer divider 1186 (H 1386).
+
+event-partial.jpg (a podium with empty places) is checked when the
+seed data produces one; the canonical seed has none, so it is
+skipped there.
+
+Positions assume the canonical demo data (bun scripts/seed.ts —
+6 centers, full podiums).
 """
 from PIL import Image
+import os
 import sys
 
 W = 1080
@@ -72,17 +93,15 @@ def band_bright(img, x0, y0, x1, y1, floor):
         if max(p.getpixel((xx, yy))) > floor
     )
 
-def region_is(img, x0, y0, x1, y1, color, tol=18, sample=7):
-    """True if a sparse grid of the region is all ~color."""
+def color_count(img, x0, y0, x1, y1, color, tol=55):
+    """count of pixels ~color in a region (locating movable elements)."""
     p = img.convert("RGB")
-    pts = 0
-    bad = 0
-    for yy in range(y0, y1, max(1, (y1 - y0) // sample)):
-        for xx in range(x0, x1, max(1, (x1 - x0) // sample)):
-            pts += 1
-            if not near(p.getpixel((xx, yy)), color, tol):
-                bad += 1
-    return bad == 0, f"{bad}/{pts} off-color pixels (e.g. {p.getpixel((x0 + 5, y0 + 5))} vs {color})"
+    return sum(
+        1
+        for yy in range(y0, min(y1, p.height))
+        for xx in range(x0, min(x1, p.width))
+        if near(p.getpixel((xx, yy)), color, tol)
+    )
 
 def sky_at(y, h):
     """The night-sky gradient at height y (sampled #1A1C25 -> #12131A)."""
@@ -143,21 +162,6 @@ def check_no_margin_ink(img, name, y0, y1):
     check(f"{name} no ink beyond left margin", left == 0, left)
     check(f"{name} no ink beyond right margin", right == 0, right)
 
-def check_podium_row(img, i, rowtop, medal):
-    # clean-body probes (no text: name glyphs end x<500, points start x>860,
-    # chip lives at y>72 on the left, rim at top+2..5)
-    clean = [(540, rowtop + 16), (650, rowtop + 16), (540, rowtop + 36), (750, rowtop + 50), (540, rowtop + 118)]
-    bad = [p for p in clean if not near(px(img, *p), PANEL, 16)]
-    check(f"podium row {i+1} is glass panel", not bad, [p for p in bad])
-    e = px(img, 540, rowtop)
-    check(f"podium row {i+1} top edge is lit", near(e, EDGE_TOP, 46), e)
-    c = px(img, 136, rowtop + 70 - 28)
-    check(f"podium row {i+1} medal is {medal[0]}", near(c, medal[1], 60), c)
-    mn, mx, cnt = band_ink(img, 198, rowtop + 26, 1040, rowtop + 66, PANEL, 24)
-    check(f"podium row {i+1} center identity ink", cnt > 140, (mn, mx, cnt))
-    mn, mx, cnt = band_ink(img, 900, rowtop + 40, 1000, rowtop + 96, PANEL, 24)
-    check(f"podium row {i+1} points ink right-aligned", cnt > 60 and mx and mx > 930, (mn, mx, cnt))
-
 def check_watch_pill(img, name, top):
     check(f"{name} pill body upper", near(px(img, 100, top + 10), PILL, 30), px(img, 100, top + 10))
     check(f"{name} pill body lower", near(px(img, 100, top + 84), (23, 71, 111), 30), px(img, 100, top + 84))
@@ -174,85 +178,153 @@ def check_watch_pill(img, name, top):
     mn, mx, cnt = band_ink(img, 430, top + 24, 1020, top + 70, PILL, 34)
     check(f"{name} url ink present", cnt > 80, (mn, mx, cnt))
 
+def check_stage_panel(img, name, top, bottom):
+    """The podium stage: one glass panel under the three columns."""
+    e = px(img, 540, top)
+    check(f"{name} stage panel top edge is lit", near(e, EDGE_TOP, 46), e)
+    clean = [(200, top + 30), (860, top + 30), (200, top + 60), (860, top + 60)]
+    bad = [p for p in clean if not near(px(img, *p), PANEL, 20)]
+    check(f"{name} stage panel is glass body", not bad, bad)
+
+def check_pedestal(img, name, x0, x1, py, ph, color, label):
+    """A rank pedestal: gradient body, ring stroke, specular rim."""
+    body = px(img, x0 + 45, py + int(ph * 0.72))
+    check(f"{name} {label} pedestal body", near(body, color, 70), body)
+    rim = px(img, (x0 + x1) // 2, py + 5)
+    check(f"{name} {label} pedestal specular rim", max(rim) > 150 and near(rim, (color[0], color[1], color[2]), 90), rim)
+    stroke = px(img, x0 + 1, py + ph // 2)
+    check(f"{name} {label} pedestal ring stroke", near(stroke, color, 80), stroke)
+
+def check_coin(img, name, x0, x1, y0, y1, color, label):
+    """The medal coin above a pedestal — located by color scan, since
+    its height follows the identity stack above the pedestal."""
+    cnt = color_count(img, x0, y0, x1, y1, color, 55)
+    check(f"{name} {label} coin present above pedestal", cnt > 40, cnt)
+
 EXPECTED = {
-    "event": 1394,
-    "event-partial": 1238,
-    "event-live": 1520,
-    "standings": 1438,
-    "standings-live": 1564,
+    "event": 1484,
+    "event-live": 1610,
+    "standings": 1260,
+    "standings-live": 1386,
 }
 
-# ── event card ───────────────────────────────────────────────
+# ── event card (the podium) ──────────────────────────────────
 print("event card (/tmp/sample-event.jpg)")
 img = Image.open("/tmp/sample-event.jpg")
 check_common_head(img, "event")
 sky1 = sky_at(370, img.height)
-mn, mx, cnt = band_ink(img, M, 344, 1040, 386, sky1, 26)
+# game hero (the event is the story), sinhala line, context line
+mn, mx, cnt = band_ink(img, M, 150, 1040, 212, sky1, 26)
 check("game name ink present", cnt > 800, (mn, mx, cnt))
-mn, mx, cnt = band_ink(img, M, 400, 1040, 436, sky1, 26)
+mn, mx, cnt = band_ink(img, M, 214, 1040, 262, sky1, 26)
 check("sinhala subtitle ink present", cnt > 400, (mn, mx, cnt))
-mn, mx, cnt = band_ink(img, M, 462, 1040, 534, sky1, 22)
+mn, mx, cnt = band_ink(img, M, 266, 1040, 312, sky1, 26)
+check("context line ink present", cnt > 300, (mn, mx, cnt))
+d = px(img, 540, 346)
+check("hairline under event header", near(d, (40, 42, 50), 16), d)
+mn, mx, cnt = band_ink(img, M, 390, 1040, 472, sky1, 22)
 check("chips ink present", cnt > 200, (mn, mx, cnt))
-for i, (rowtop, medal) in enumerate(
-    [(564, ("gold", GOLD)), (720, ("silver", SILVER)), (876, ("bronze", BRONZE))]
-):
-    check_podium_row(img, i, rowtop, medal)
-mn, mx, cnt = band_ink(img, M, 1052, 1040, 1086, sky1, 22)
+
+# the stage: panel + three pedestals, bases on one floor
+check_stage_panel(img, "event", 490, 1114)
+check_pedestal(img, "event", 395, 684, 862, 212, GOLD, "gold")
+check_pedestal(img, "event", 90, 379, 920, 154, SILVER, "silver")
+check_pedestal(img, "event", 710, 999, 954, 120, BRONZE, "bronze")
+# gap between the pedestals shows panel, not a fourth column
+g = px(img, 388, 1050)
+check("gap between pedestals is panel", near(g, PANEL, 20), g)
+# the floor hairline the pedestals stand on
+f = px(img, 540, 1082)
+check("stage floor line", near(f, (56, 63, 82), 24), f)
+# coins above each pedestal (height follows the identity stack)
+check_coin(img, "event", 460, 620, 540, 700, GOLD, "gold")
+check_coin(img, "event", 155, 315, 620, 760, SILVER, "silver")
+check_coin(img, "event", 775, 935, 680, 820, BRONZE, "bronze")
+# identity + points ink in each column
+mn, mx, cnt = band_ink(img, 400, 700, 680, 850, PANEL, 22)
+check("gold column identity ink", cnt > 250, (mn, mx, cnt))
+mn, mx, cnt = band_ink(img, 95, 760, 375, 912, PANEL, 22)
+check("silver column identity ink", cnt > 200, (mn, mx, cnt))
+mn, mx, cnt = band_ink(img, 715, 790, 995, 945, PANEL, 22)
+check("bronze column identity ink", cnt > 200, (mn, mx, cnt))
+# the quiet overall line under the stage
+mn, mx, cnt = band_ink(img, M, 1148, 1040, 1180, sky1, 22)
 check("overall standings label ink", cnt > 100, (mn, mx, cnt))
-mn, mx, cnt = band_ink(img, M, 1104, 1040, 1136, sky1, 22)
+mn, mx, cnt = band_ink(img, M, 1198, 1040, 1232, sky1, 22)
 check("overall standings line ink", cnt > 300, (mn, mx, cnt))
-check_no_margin_ink(img, "event", 330, 1300)
-check_footer(img, "event", 1194)
+check_no_margin_ink(img, "event", 330, 1260)
+check_footer(img, "event", 1284)
 
 # ── event card with guest link ───────────────────────────────
 print("event card + guest link (/tmp/sample-event-live.jpg)")
 img = Image.open("/tmp/sample-event-live.jpg")
 check_common_head(img, "event-live")
-check_watch_pill(img, "event-live", 1186)
-check_footer(img, "event-live", 1320)
+check_watch_pill(img, "event-live", 1276)
+check_footer(img, "event-live", 1410)
 
-# ── partial podium event card ────────────────────────────────
-print("partial event card (/tmp/sample-event-partial.jpg)")
-img = Image.open("/tmp/sample-event-partial.jpg")
-check_common_head(img, "event-partial")
-clean = [(540, 574 + 16), (650, 574 + 16), (540, 594), (750, 608), (540, 676)]
-bad = [p for p in clean if not near(px(img, *p), PANEL, 16)]
-check("partial row 1 is glass panel", not bad, bad)
-clean = [(540, 730 + 16), (650, 730 + 16), (540, 750), (750, 764), (540, 832)]
-bad = [p for p in clean if not near(px(img, *p), PANEL, 16)]
-check("partial row 2 is glass panel", not bad, bad)
+# ── partial podium event card (when the seed data has one) ────
+if os.path.exists("/tmp/sample-event-partial.jpg"):
+    print("partial event card (/tmp/sample-event-partial.jpg)")
+    img = Image.open("/tmp/sample-event-partial.jpg")
+    check("partial card renders with a shorter stage", img.height < EXPECTED["event"], img.height)
+    check_stage_panel(img, "event-partial", 490, img.height - 780)
+else:
+    print("partial event card: skipped (no partial podium in seed data)")
 
-# ── standings card ───────────────────────────────────────────
+# ── standings card (the classification table) ─────────────────
 print("standings card (/tmp/sample-standings.jpg)")
 img = Image.open("/tmp/sample-standings.jpg")
 check_common_head(img, "standings")
-rowtops = [340 + i * 126 for i in range(7)]
+# one glass panel, not stacked row cards
+e = px(img, 540, 340)
+check("table panel top edge is lit", near(e, EDGE_TOP, 46), e)
+clean = [(450, 360), (700, 480), (700, 700), (450, 980)]
+bad = [p for p in clean if not near(px(img, *p), PANEL, 20)]
+check("table panel is one glass body", not bad, [p for p in bad])
+# header row
+mn, mx, cnt = band_ink(img, M, 352, 700, 392, PANEL, 24)
+check("table header labels ink", cnt > 120, (mn, mx, cnt))
+cnt = color_count(img, 640, 358, 700, 392, GOLD, 55)
+check("header gold dot present", cnt > 8, cnt)
+cnt = color_count(img, 796, 358, 856, 392, BRONZE, 55)
+check("header bronze dot present", cnt > 8, cnt)
+d = px(img, 540, 404)
+check("header divider", near(d, (58, 66, 85), 18), d)
+# rows: coins, identity, G/S/B counts, points
+rowtops = [406 + i * 104 for i in range(6)]
 for i, rowtop in enumerate(rowtops):
-    clean = [(540, rowtop + 14), (650, rowtop + 14), (540, rowtop + 30), (750, rowtop + 44), (540, rowtop + 100)]
-    bad = [p for p in clean if not near(px(img, *p), PANEL, 16)]
-    check(f"standings row {i+1} is glass panel", not bad, [p for p in bad])
     if i < 3:
-        c = px(img, 126, rowtop + 56 - 24)
+        c = px(img, 98, rowtop + 44)
         expected = [GOLD, SILVER, BRONZE][i]
         check(f"standings row {i+1} medal color", near(c, expected, 65), c)
     else:
-        c = px(img, 126, rowtop + 56 - 36)
+        c = px(img, 110, rowtop + 22)
         check(f"standings row {i+1} neutral coin stroke", near(c, COIN, 46), c)
-        mn, mx, cnt = band_ink(img, M + 20, rowtop + 20, M + 110, rowtop + 92, PANEL, 26)
-        check(f"standings row {i+1} rank numeral ink", cnt > 40, (mn, mx, cnt))
-    mn, mx, cnt = band_ink(img, 176, rowtop + 16, 1040, rowtop + 56, PANEL, 26)
-    check(f"standings row {i+1} name ink", cnt > 100, (mn, mx, cnt))
-    mn, mx, cnt = band_ink(img, 890, rowtop + 28, 1000, rowtop + 84, PANEL, 26)
-    check(f"standings row {i+1} total points ink", cnt > 50, (mn, mx, cnt))
-check_no_margin_ink(img, "standings", 320, 1200)
-check_footer(img, "standings", 1238)
+        mn, mx, cnt = band_ink(img, 90, rowtop + 28, 132, rowtop + 70, PANEL, 26)
+        check(f"standings row {i+1} rank numeral ink", cnt > 30, (mn, mx, cnt))
+    mn, mx, cnt = band_ink(img, 152, rowtop + 12, 640, rowtop + 52, PANEL, 26)
+    check(f"standings row {i+1} identity ink", cnt > 60, (mn, mx, cnt))
+    mn, mx, cnt = band_ink(img, 646, rowtop + 20, 706, rowtop + 76, PANEL, 26)
+    check(f"standings row {i+1} gold count ink", cnt > 15, (mn, mx, cnt))
+    mn, mx, cnt = band_ink(img, 802, rowtop + 20, 862, rowtop + 76, PANEL, 26)
+    check(f"standings row {i+1} bronze count ink", cnt > 15, (mn, mx, cnt))
+    mn, mx, cnt = band_ink(img, 850, rowtop + 16, 992, rowtop + 84, PANEL, 26)
+    check(f"standings row {i+1} total points ink right-aligned", cnt > 40 and mx and mx > 900, (mn, mx, cnt))
+    if i < 5:
+        d = px(img, 300, rowtop + 103)
+        check(f"standings row {i+1} hairline divider", near(d, (50, 58, 77), 16), d)
+# leader gold tab on the left edge
+t = px(img, 71, 450)
+check("leader gold tab", near(t, GOLD, 70), t)
+check_no_margin_ink(img, "standings", 320, 1000)
+check_footer(img, "standings", 1060)
 
 # ── standings card with guest link ───────────────────────────
 print("standings card + guest link (/tmp/sample-standings-live.jpg)")
 img = Image.open("/tmp/sample-standings-live.jpg")
 check_common_head(img, "standings-live")
-check_watch_pill(img, "standings-live", 1230)
-check_footer(img, "standings-live", 1364)
+check_watch_pill(img, "standings-live", 1052)
+check_footer(img, "standings-live", 1186)
 
 print()
 print(f"layout check: {passed} passed · {len(failures)} failed")

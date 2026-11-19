@@ -12,11 +12,21 @@ import type { EventDTO, TournamentDetailDTO } from '@/lib/types'
 //
 // The app talks to a self-hosted WAHA server (devlikeapro/waha).
 // Verified REST surface (docs + live probe):
-//   GET  /api/sessions          → [{ name, status, ... }]
-//   GET  /api/{session}/groups  → groups the account belongs to
-//   POST /api/sendText          → { session, chatId, text }
-//   POST /api/sendImage         → { session, chatId, file, caption }
-// Every request carries the `X-Api-Key` header when a key is set.
+//   GET  /api/sessions                     → [{ name, status, ... }]
+//   GET  /api/sessions/{session}           → one session's status
+//   GET  /api/{session}/groups             → groups the account belongs to
+//   POST /api/{session}/groups/refresh     → re-sync groups, then re-list
+//   POST /api/sendText                     → { session, chatId, text }
+//   POST /api/sendImage                    → { session, chatId, file, caption }
+//   POST /api/sessions                     → create a session
+//   POST /api/sessions/{session}/start|stop|restart|logout
+//   GET  /api/{session}/auth/qr?format=image → pairing QR (Base64File)
+//   GET  /api/sessions/{session}/me        → the connected account
+//
+// Two auth styles, sent simultaneously when both are configured:
+// the `X-Api-Key` header for key-protected servers, and HTTP basic
+// auth (username + password) for WAHA's LOGIN_PASSWORD mode and for
+// servers gated behind a basic-auth reverse proxy.
 // Engines name the group fields differently — the JS cores return
 // { id, name }, the Go core (gows, e.g. the *-arm images) returns
 // { JID, Name }; `subject` covers older cores. All three are read.
@@ -32,6 +42,10 @@ import type { EventDTO, TournamentDetailDTO } from '@/lib/types'
 export interface WhatsAppConfig {
   baseUrl: string
   apiKey: string
+  /** Basic-auth username (LOGIN_PASSWORD mode / auth proxy). */
+  username: string
+  /** Basic-auth password — stored like the API key, never returned. */
+  password: string
   session: string
   groupChatId: string
   groupName: string
@@ -43,6 +57,14 @@ export interface WhatsAppConfig {
   publicBaseUrl: string
 }
 
+/** The credential half of a WAHA request — either style, or both. */
+export interface WahaCredentials {
+  baseUrl: string
+  apiKey: string
+  username: string
+  password: string
+}
+
 export interface WhatsAppPublicConfig {
   configured: boolean
   baseUrl: string
@@ -52,6 +74,8 @@ export interface WhatsAppPublicConfig {
   autoEvents: boolean
   apiKeySet: boolean
   apiKeyHint: string
+  username: string
+  passwordSet: boolean
   publicBaseUrl: string
 }
 
@@ -65,6 +89,14 @@ export interface WahaGroupInfo {
   name: string
 }
 
+/** The WhatsApp account behind a WORKING session (`/me`). */
+export interface WahaAccount {
+  /** Chat id of the account, e.g. `94771234567@c.us`. */
+  id: string
+  /** The profile name, e.g. `Tourny Bot`. */
+  pushName: string
+}
+
 const SETTING_KEY = 'whatsapp'
 const GROUP_SUFFIX = '@g.us'
 
@@ -74,6 +106,8 @@ function configFromEnv(): Partial<WhatsAppConfig> {
   return {
     baseUrl: process.env.WAHA_BASE_URL?.trim() ?? '',
     apiKey: process.env.WAHA_API_KEY?.trim() ?? '',
+    username: process.env.WAHA_USERNAME?.trim() ?? '',
+    password: process.env.WAHA_PASSWORD ?? '',
     session: process.env.WAHA_SESSION?.trim() ?? 'default',
     groupChatId: process.env.WAHA_GROUP_CHAT_ID?.trim() ?? '',
     autoEvents: process.env.WAHA_AUTO_EVENTS === 'true',
@@ -96,6 +130,8 @@ export async function getWhatsAppConfig(): Promise<WhatsAppConfig | null> {
       return {
         baseUrl: normalizeBaseUrl(stored.baseUrl ?? ''),
         apiKey: stored.apiKey ?? '',
+        username: stored.username?.trim() ?? '',
+        password: stored.password ?? '',
         session: stored.session?.trim() || 'default',
         groupChatId: stored.groupChatId?.trim() ?? '',
         groupName: stored.groupName ?? '',
@@ -109,32 +145,56 @@ export async function getWhatsAppConfig(): Promise<WhatsAppConfig | null> {
   const merged: WhatsAppConfig = {
     baseUrl: normalizeBaseUrl(env.baseUrl ?? ''),
     apiKey: env.apiKey ?? '',
+    username: env.username ?? '',
+    password: env.password ?? '',
     session: env.session?.trim() || 'default',
     groupChatId: env.groupChatId ?? '',
     groupName: '',
     autoEvents: env.autoEvents === true,
     publicBaseUrl: env.publicBaseUrl ?? '',
   }
+  // Headless fallback needs a complete connection — a destination
+  // group plus one auth style that can actually reach the server.
   if (!merged.baseUrl || !merged.groupChatId) return null
+  if (!merged.apiKey && !merged.username && !merged.password) return null
   return merged
 }
 
-/** Upserts the configuration; empty `apiKey` keeps the stored key. */
+/** Upserts the configuration; empty `apiKey` keeps the stored key
+ *  (`clearApiKey: true` removes it — for switching a server from
+ *  key auth to basic auth and leaving no stale key behind). */
 export async function saveWhatsAppConfig(
-  patch: Partial<WhatsAppConfig>
+  patch: Partial<WhatsAppConfig> & { clearApiKey?: boolean }
 ): Promise<WhatsAppConfig> {
   const current = (await getWhatsAppConfig()) ?? {
     baseUrl: '',
     apiKey: '',
+    username: '',
+    password: '',
     session: 'default',
     groupChatId: '',
     groupName: '',
     autoEvents: false,
     publicBaseUrl: '',
   }
+  // Clearing the username clears the password too — they are one
+  // basic-auth pair; a blank password alone means "keep the stored
+  // one" (exactly like a blank API key).
+  const clearingBasicAuth = patch.username === '' && !patch.password
   const next: WhatsAppConfig = {
     baseUrl: patch.baseUrl !== undefined ? normalizeBaseUrl(patch.baseUrl) : current.baseUrl,
-    apiKey: patch.apiKey?.trim() ? patch.apiKey.trim() : current.apiKey,
+    apiKey: patch.clearApiKey
+      ? ''
+      : patch.apiKey?.trim()
+        ? patch.apiKey.trim()
+        : current.apiKey,
+    username:
+      patch.username !== undefined ? patch.username.trim() : current.username,
+    password: clearingBasicAuth
+      ? ''
+      : patch.password
+        ? patch.password
+        : current.password,
     // A partial patch (e.g. only the auto-share toggle) must not
     // reset the session to 'default' — only an explicit value does.
     session:
@@ -156,9 +216,11 @@ export async function saveWhatsAppConfig(
   return next
 }
 
-/** Client-safe projection — the key never leaves the server. */
+/** Client-safe projection — neither key nor password ever leaves. */
 export function toPublicConfig(cfg: WhatsAppConfig | null): WhatsAppPublicConfig {
-  const complete = Boolean(cfg && cfg.baseUrl && cfg.apiKey && cfg.groupChatId)
+  const complete = Boolean(
+    cfg && cfg.baseUrl && cfg.groupChatId && (cfg.apiKey || cfg.username || cfg.password)
+  )
   return {
     configured: complete,
     baseUrl: cfg?.baseUrl ?? '',
@@ -168,6 +230,8 @@ export function toPublicConfig(cfg: WhatsAppConfig | null): WhatsAppPublicConfig
     autoEvents: cfg?.autoEvents === true,
     apiKeySet: Boolean(cfg?.apiKey),
     apiKeyHint: cfg?.apiKey ? `${cfg.apiKey.slice(0, 3)}…${cfg.apiKey.slice(-2)}` : '',
+    username: cfg?.username ?? '',
+    passwordSet: Boolean(cfg?.password),
     publicBaseUrl: cfg?.publicBaseUrl ?? '',
   }
 }
@@ -215,6 +279,10 @@ export function eventLink(
 
 export class WahaError extends Error {
   status: number
+  /** The HTTP status WAHA itself returned, when the error is a
+ *  translated upstream failure — 502 to the client, but callers
+ *  can distinguish "not found" from "broken". */
+  upstreamStatus?: number
   constructor(message: string, status = 400) {
     super(message)
     this.status = status
@@ -222,10 +290,16 @@ export class WahaError extends Error {
 }
 
 async function wahaRequest<T>(
-  cfg: { baseUrl: string; apiKey: string },
+  cfg: WahaCredentials,
   path: string,
-  init?: { method?: string; body?: unknown }
+  init?: { method?: string; body?: unknown; timeoutMs?: number }
 ): Promise<T> {
+  // Both styles at once is deliberate: a key-protected WAHA behind
+  // a basic-auth proxy needs both headers on every request.
+  const basic =
+    cfg.username || cfg.password
+      ? `Basic ${Buffer.from(`${cfg.username ?? ''}:${cfg.password ?? ''}`).toString('base64')}`
+      : null
   let res: Response
   try {
     res = await fetch(`${normalizeBaseUrl(cfg.baseUrl)}${path}`, {
@@ -234,9 +308,10 @@ async function wahaRequest<T>(
         Accept: 'application/json',
         'Content-Type': 'application/json',
         ...(cfg.apiKey ? { 'X-Api-Key': cfg.apiKey } : {}),
+        ...(basic ? { Authorization: basic } : {}),
       },
       body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(init?.timeoutMs ?? 15_000),
       cache: 'no-store',
     })
   } catch (err) {
@@ -254,7 +329,9 @@ async function wahaRequest<T>(
   if (!res.ok) {
     const detail = (await res.json().catch(() => null)) as { message?: string; error?: string } | null
     const reason = detail?.message || detail?.error || `HTTP ${res.status}`
-    throw new WahaError(`The WhatsApp server said: ${reason}`, 502)
+    const err = new WahaError(`The WhatsApp server said: ${reason}`, 502)
+    err.upstreamStatus = res.status
+    throw err
   }
   try {
     return (await res.json()) as T
@@ -263,12 +340,64 @@ async function wahaRequest<T>(
   }
 }
 
+/** Resolves the credentials for a Settings request: the typed
+ *  values win, blank fields fall back to what is stored. The
+ *  returned object is complete — `null` credentials means the
+ *  request cannot be served (with the reason in `error`). */
+export async function resolveWahaCredentials(
+  body: { baseUrl?: unknown; apiKey?: unknown; username?: unknown; password?: unknown }
+): Promise<{ creds: WahaCredentials } | { error: string }> {
+  const baseUrl = typeof body.baseUrl === 'string' ? body.baseUrl.trim() : ''
+  const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : ''
+  const username = typeof body.username === 'string' ? body.username.trim() : ''
+  const password = typeof body.password === 'string' ? body.password : ''
+  const stored = (await getWhatsAppConfig()) as WahaCredentials | null
+  const creds: WahaCredentials = {
+    baseUrl: baseUrl || stored?.baseUrl || '',
+    apiKey: apiKey || stored?.apiKey || '',
+    username: username || stored?.username || '',
+    password: password || stored?.password || '',
+  }
+  if (!creds.baseUrl || !/^https?:\/\//i.test(creds.baseUrl)) {
+    return { error: 'Enter the WhatsApp server address (https://…).' }
+  }
+  if (!creds.apiKey && !creds.username && !creds.password) {
+    return {
+      error:
+        'Enter the API key of the WhatsApp server, or a username and password (basic auth) — whichever it accepts.',
+    }
+  }
+  return { creds }
+}
+
 /** Lists sessions with their status (WORKING = connected & ready). */
-export async function listWahaSessions(baseUrl: string, apiKey: string): Promise<WahaSessionInfo[]> {
-  const sessions = await wahaRequest<{ name?: string; status?: string }[]>({ baseUrl, apiKey }, '/api/sessions')
+export async function listWahaSessions(creds: WahaCredentials): Promise<WahaSessionInfo[]> {
+  const sessions = await wahaRequest<{ name?: string; status?: string }[]>(creds, '/api/sessions')
   return sessions
     .filter((s) => s && typeof s.name === 'string')
     .map((s) => ({ name: s.name as string, status: s.status ?? 'UNKNOWN' }))
+}
+
+/** One session's live status — null when it does not exist. */
+export async function getWahaSession(
+  creds: WahaCredentials,
+  session: string
+): Promise<WahaSessionInfo | null> {
+  try {
+    const dto = await wahaRequest<{ name?: string; status?: string }>(
+      creds,
+      `/api/sessions/${encodeURIComponent(session)}`
+    )
+    return { name: dto.name ?? session, status: dto.status ?? 'UNKNOWN' }
+  } catch (err) {
+    if (
+      err instanceof WahaError &&
+      (err.upstreamStatus === 404 || err.status === 404 || err.status === 400)
+    ) {
+      return null
+    }
+    throw err
+  }
 }
 
 // Field spellings differ per engine: JS cores use { id, name }, the
@@ -295,8 +424,7 @@ function normalizeGroups(raw: RawGroup[]): WahaGroupInfo[] {
 /** Lists the groups the connected account belongs to, sorted by
  *  name. Group ids must end in @g.us; unnamed groups show their id. */
 export async function listWahaGroups(
-  baseUrl: string,
-  apiKey: string,
+  creds: WahaCredentials,
   session: string
 ): Promise<WahaGroupInfo[]> {
   // No query params: engines disagree on which are supported (gows
@@ -304,10 +432,101 @@ export async function listWahaGroups(
   // endpoint is the one surface every core answers — sorting happens
   // client-side instead.
   const groups = await wahaRequest<RawGroup[]>(
-    { baseUrl, apiKey },
+    creds,
     `/api/${encodeURIComponent(session)}/groups`
   )
   return normalizeGroups(groups)
+}
+
+/** Re-syncs the group list from WhatsApp's servers, then re-lists —
+ *  picks up groups the account joined since the last listing. */
+export async function refreshWahaGroups(
+  creds: WahaCredentials,
+  session: string
+): Promise<WahaGroupInfo[]> {
+  // Best-effort: older cores may not know the refresh call — the
+  // re-list below still returns whatever the engine already has.
+  await wahaRequest(creds, `/api/${encodeURIComponent(session)}/groups/refresh`, {
+    method: 'POST',
+  }).catch(() => undefined)
+  return listWahaGroups(creds, session)
+}
+
+// ── session lifecycle & pairing ───────────────────────────────
+
+type SessionAction = 'start' | 'stop' | 'restart' | 'logout'
+
+/** Runs a session lifecycle call — every variant answers with the
+ *  session's new state, which is all the caller needs. */
+async function sessionAction(
+  creds: WahaCredentials,
+  session: string,
+  action: SessionAction
+): Promise<WahaSessionInfo> {
+  const dto = await wahaRequest<{ name?: string; status?: string }>(
+    creds,
+    `/api/sessions/${encodeURIComponent(session)}/${action}`,
+    { method: 'POST' }
+  )
+  return { name: dto.name ?? session, status: dto.status ?? 'UNKNOWN' }
+}
+
+export const startWahaSession = (c: WahaCredentials, s: string) => sessionAction(c, s, 'start')
+export const stopWahaSession = (c: WahaCredentials, s: string) => sessionAction(c, s, 'stop')
+export const restartWahaSession = (c: WahaCredentials, s: string) => sessionAction(c, s, 'restart')
+export const logoutWahaSession = (c: WahaCredentials, s: string) => sessionAction(c, s, 'logout')
+
+/** Creates a session and starts it — it comes up unpaired, ready
+ *  for its first QR scan. */
+export async function createWahaSession(
+  creds: WahaCredentials,
+  name: string
+): Promise<WahaSessionInfo> {
+  const dto = await wahaRequest<{ name?: string; status?: string }>(creds, '/api/sessions', {
+    method: 'POST',
+    body: { name, start: true },
+  })
+  return { name: dto.name ?? name, status: dto.status ?? 'UNKNOWN' }
+}
+
+/** The pairing QR as a ready-to-render data URL, or null when the
+ *  session is not currently offering one (already paired, stopped,
+ *  or not yet far enough in startup). Null is a normal state — the
+ *  UI polls and shows the image as soon as WhatsApp regenerates it. */
+export async function getWahaQrCode(
+  creds: WahaCredentials,
+  session: string
+): Promise<string | null> {
+  try {
+    const file = await wahaRequest<{ mimetype?: string; data?: string; value?: string }>(
+      creds,
+      `/api/${encodeURIComponent(session)}/auth/qr?format=image`,
+      { timeoutMs: 10_000 }
+    )
+    if (!file?.data) return null // raw `value` needs a QR renderer — not our path
+    const mime = file.mimetype?.startsWith('image/') ? file.mimetype : 'image/png'
+    return `data:${mime};base64,${file.data}`
+  } catch {
+    return null // 404/500 = no QR right now; polling decides what happens next
+  }
+}
+
+/** The WhatsApp account behind a session — which number the group
+ *  messages come from. Null when it cannot be read (not WORKING). */
+export async function getWahaMe(
+  creds: WahaCredentials,
+  session: string
+): Promise<WahaAccount | null> {
+  try {
+    const me = await wahaRequest<{ id?: string; pushName?: string }>(
+      creds,
+      `/api/sessions/${encodeURIComponent(session)}/me`
+    )
+    if (!me?.id) return null
+    return { id: me.id, pushName: me.pushName ?? '' }
+  } catch {
+    return null
+  }
 }
 
 /** Sends plain text to the configured group. */
@@ -372,17 +591,17 @@ function render(lines: (string | null)[]): string {
   return lines.filter((l): l is string => l !== null).join('\n')
 }
 
-/** Overall standings — one line per center that has scored. */
+/** Overall standings — one line per center, points or not: the
+ *  group sees the full table, including centers yet to score. */
 export function buildStandingsMessage(
   detail: TournamentDetailDTO,
   opts?: { presentUrl?: string | null }
 ): string {
   const { tournament, standings } = detail
-  const scored = standings.filter((r) => r.total > 0)
-  if (scored.length === 0) {
-    throw new WahaError('No results have been recorded yet — nothing to share.', 400)
+  if (standings.length === 0) {
+    throw new WahaError('No centers yet — nothing to share.', 400)
   }
-  const lines = scored.map((row, i) => {
+  const lines = standings.map((row, i) => {
     const prefix = i < 3 ? MEDALS[i] : `${i + 1}.`
     return `${prefix} *${centerLabel(row)}* — ${row.total} pts`
   })

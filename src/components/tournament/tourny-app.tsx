@@ -9,10 +9,10 @@ import type { AppRoute } from '@/lib/app-route'
 import { useAppStore } from '@/store/app-store'
 import { AppShell } from '@/components/tournament/app-shell'
 import { HomeView } from '@/components/tournament/home-view'
-import { ScoringView } from '@/components/tournament/scoring-view'
 import { ScoreboardView } from '@/components/tournament/scoreboard-view'
 import { OverviewView } from '@/components/tournament/manage/overview-view'
 import { CentersView } from '@/components/tournament/manage/centers-view'
+import { StudentsView } from '@/components/tournament/manage/students-view'
 import { HistoryView } from '@/components/tournament/manage/history-view'
 import { SettingsView } from '@/components/tournament/manage/settings-view'
 import { PrintSheets } from '@/components/tournament/print-sheets'
@@ -23,8 +23,11 @@ import { TeamDialog } from '@/components/tournament/team-dialog'
  * The application root. The route (from the URL) is applied to the
  * store on every change — the address bar is the single source of
  * truth for where you are; navigation actions only ever push URLs.
+ *
+ * `variant` comes from the server (APP_VARIANT env) so the
+ * experimental build can badge itself in the shell.
  */
-export function TournyApp({ route }: { route: AppRoute }) {
+export function TournyApp({ route, variant = '' }: { route: AppRoute; variant?: string }) {
   const router = useRouter()
   const { toast } = useToast()
   const view = useAppStore((s) => s.view)
@@ -70,11 +73,11 @@ export function TournyApp({ route }: { route: AppRoute }) {
 
   return (
     <MotionConfig reducedMotion="user">
-      <AppShell>
+      <AppShell variant={variant}>
         {view === 'home' ? <HomeView /> : null}
-        {view === 'scoring' ? <ScoringView /> : null}
         {view === 'overview' ? <OverviewView /> : null}
         {view === 'centers' ? <CentersView /> : null}
+        {view === 'students' ? <StudentsView /> : null}
         {view === 'history' ? <HistoryView /> : null}
         {view === 'settings' ? <SettingsView /> : null}
       </AppShell>

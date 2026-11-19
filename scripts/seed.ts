@@ -7,7 +7,8 @@
  */
 import { db } from '../src/lib/db'
 import { createFromPreset } from '../src/lib/tournament-service'
-import { submitResult, setEventStatus } from '../src/lib/result-service'
+import { submitResult } from '../src/lib/result-service'
+import { updateEvent } from '../src/lib/event-service'
 
 interface PodiumPlan {
   division: string
@@ -125,7 +126,7 @@ async function main() {
     (e) => e.division.code === 'D' && e.game.code === 'card' && e.subEventIndex === 1
   )
   if (inProgress) {
-    await setEventStatus(inProgress.id, 'in_progress')
+    await updateEvent(inProgress.id, { status: 'in_progress' })
     console.log(`  ◔ ${inProgress.label} → in_progress`)
   }
 

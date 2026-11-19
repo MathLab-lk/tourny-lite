@@ -30,3 +30,18 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Two-slot deployment runtime state (managed by deploy/deploy.sh)
+deploy/worktrees/
+deploy/env/
+deploy/data/
+deploy/data-stable/
+deploy/data-dev/
+deploy/data-experimental/
+deploy/backups/
+deploy/deploy.local.env
+
+# local scratch — visual verification, demo data scripts, fonts
+
+# local scratch — visual verification, demo data scripts, fonts
+.scratch/

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Award, ChevronRight, Crown, Expand, Medal, Trophy, Wifi, WifiOff } from 'lucide-react'
 import { AnimatedNumber } from '@/components/tournament/ui-bits'
+import { RankingsModeToggle, StudentRankingsStage, type RankingsMode } from '@/components/tournament/student-rankings-stage'
 import { cn } from '@/lib/utils'
 import type { TournamentDetailDTO } from '@/lib/types'
 
@@ -12,13 +13,16 @@ import type { TournamentDetailDTO } from '@/lib/types'
  * presentation. No sign-in, no chrome: open the shared link from
  * WhatsApp and watch. Standings arrive over the same SSE stream the
  * staff app uses and reorder live; on phones the leaderboard table
- * becomes stacked result cards.
+ * becomes stacked result cards. Guests can switch between the
+ * center standings and the student ranking stage — the same two
+ * acts the projector shows.
  */
 export function PresentBoard({ id }: { id: string }) {
   const [detail, setDetail] = useState<TournamentDetailDTO | null>(null)
   const [connected, setConnected] = useState(false)
   const [gone, setGone] = useState(false)
   const [updatedAt, setUpdatedAt] = useState<number | null>(null)
+  const [mode, setMode] = useState<RankingsMode>('centers')
 
   useEffect(() => {
     let es: EventSource | null = null
@@ -73,6 +77,8 @@ export function PresentBoard({ id }: { id: string }) {
   const tournament = detail?.tournament
   const standings = detail?.standings ?? []
   const progress = detail?.progress
+  const studentStandings = detail?.studentStandings ?? []
+  const hasStudents = (detail?.students.length ?? 0) > 0
 
   const goFullscreen = () => {
     if (typeof document === 'undefined') return
@@ -97,32 +103,25 @@ export function PresentBoard({ id }: { id: string }) {
       )
     if (rank === 2) return <Medal className="h-5 w-5 text-zinc-300" aria-hidden />
     if (rank === 3) return <Award className="h-5 w-5 text-orange-600" aria-hidden />
-    return <span className="font-semibold text-zinc-400 tabular-nums">{rank}</span>
+    return <span className="font-semibold text-muted-foreground tabular-nums">{rank}</span>
   }
 
   return (
-    <div className="dark min-h-screen bg-zinc-950 text-zinc-100">
-      {/* Layered atmosphere: the app's starfield (full strength in the
-          dark scope), gold spotlight, cool counter-glow, vignette, grain */}
-      <div className="stars fixed" aria-hidden />
-      <div className="stars-twinkle fixed" aria-hidden />
-      <div
-        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,rgba(251,191,36,0.09),transparent_55%)]"
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_bottom_right,rgba(45,212,191,0.06),transparent_50%)]"
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_center,transparent_50%,rgba(0,0,0,0.55))]"
-        aria-hidden
-      />
+    <div className="dark min-h-screen bg-background text-foreground">
+      {/* The app's own atmosphere, at full night strength: the
+          drifting aurora, the starfield, the vignette and the grain —
+          the guest scoreboard is the same liquid-glass world as the
+          staff app, not a separate dark theme. Gold appears only
+          where podium semantics ask for it. */}
+      <div className="aurora" aria-hidden />
+      <div className="stars" aria-hidden />
+      <div className="stars-twinkle" aria-hidden />
+      <div className="vignette" aria-hidden />
       <div className="noise" aria-hidden />
 
       {/* Connection pill + fullscreen — pinned to the top, never
           floating over the standings */}
-      <div className="sticky top-0 z-10 flex items-center justify-center gap-2 bg-gradient-to-b from-zinc-950/90 to-transparent p-3">
+      <div className="sticky top-0 z-10 flex items-center justify-center gap-2 bg-gradient-to-b from-background/90 to-transparent p-3">
         <span
           className={cn(
             'flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold tracking-wider',
@@ -143,7 +142,7 @@ export function PresentBoard({ id }: { id: string }) {
             type="button"
             onClick={goFullscreen}
             aria-label="Toggle fullscreen"
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-zinc-900/70 text-zinc-300 backdrop-blur transition-colors hover:bg-zinc-800 hover:text-white"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-foreground/70 backdrop-blur transition-colors hover:bg-white/10 hover:text-foreground"
           >
             <Expand className="h-4 w-4" aria-hidden />
           </button>
@@ -153,16 +152,16 @@ export function PresentBoard({ id }: { id: string }) {
       <div className="relative z-[1] mx-auto w-full max-w-6xl px-4 pb-20 sm:px-8">
         {gone ? (
           <div className="pt-24 text-center">
-            <Trophy className="mx-auto h-10 w-10 text-zinc-600" aria-hidden />
-            <h1 className="mt-4 text-2xl font-semibold text-white">Tournament not found</h1>
-            <p className="mt-2 text-sm text-zinc-400">
+            <Trophy className="mx-auto h-10 w-10 text-foreground/30" aria-hidden />
+            <h1 className="mt-4 text-2xl font-semibold text-foreground">Tournament not found</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
               It may have been removed — ask the organizer for a fresh link.
             </p>
           </div>
         ) : !detail ? (
           <div className="pt-24 text-center">
-            <div className="mx-auto h-10 w-10 animate-pulse rounded-full border-2 border-amber-400/40 border-t-amber-400" aria-hidden />
-            <p className="mt-5 text-sm text-zinc-400">Loading the scoreboard…</p>
+            <div className="mx-auto h-10 w-10 animate-pulse rounded-full border-2 border-primary/40 border-t-primary" aria-hidden />
+            <p className="mt-5 text-sm text-muted-foreground">Loading the scoreboard…</p>
           </div>
         ) : (
           <>
@@ -173,20 +172,20 @@ export function PresentBoard({ id }: { id: string }) {
               transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
               className="pt-2 text-center"
             >
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-amber-400/90 sm:text-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-primary sm:text-sm">
                 {tournament?.organizer || 'Live Scoreboard'}
               </p>
-              <h1 className="mt-2 text-balance text-3xl font-semibold tracking-tight text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.6)] sm:text-6xl">
+              <h1 className="mt-2 text-balance text-3xl font-semibold tracking-tight text-foreground drop-shadow-[0_4px_24px_rgba(0,0,0,0.6)] sm:text-6xl">
                 {tournament?.name ?? 'Tournament'}
               </h1>
               <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs font-semibold">
-                <span className="rounded-full border border-amber-400/40 bg-amber-400/5 px-3 py-1 text-amber-300">
+                <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-amber-400">
                   1st × {tournament?.pointsFirst ?? 75}
                 </span>
-                <span className="rounded-full border border-zinc-400/40 bg-zinc-400/5 px-3 py-1 text-zinc-300">
+                <span className="rounded-full border border-white/15 bg-white/[0.04] px-3 py-1 text-zinc-300">
                   2nd × {tournament?.pointsSecond ?? 50}
                 </span>
-                <span className="rounded-full border border-orange-600/50 bg-orange-600/5 px-3 py-1 text-orange-400">
+                <span className="rounded-full border border-orange-400/30 bg-orange-400/10 px-3 py-1 text-orange-400">
                   3rd × {tournament?.pointsThird ?? 25}
                 </span>
               </div>
@@ -196,21 +195,21 @@ export function PresentBoard({ id }: { id: string }) {
             {progress ? (
               <div className="mx-auto mt-8 max-w-3xl">
                 <div className="mb-2 flex items-center justify-between text-sm">
-                  <span className="font-medium text-zinc-300">
-                    Completed: <span className="text-amber-400 tabular-nums">{progress.completed}</span>
+                  <span className="font-medium text-muted-foreground">
+                    Completed: <span className="text-primary tabular-nums">{progress.completed}</span>
                     {' / '}
                     {progress.total} events
                   </span>
-                  <span className="font-semibold text-white">
+                  <span className="font-semibold text-foreground">
                     <AnimatedNumber value={progress.percent} />%
                   </span>
                 </div>
-                <div className="h-3 w-full overflow-hidden rounded-full bg-zinc-800/80 ring-1 ring-white/5">
+                <div className="h-3 w-full overflow-hidden rounded-full bg-foreground/10 ring-1 ring-white/5">
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${progress.percent}%` }}
                     transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
-                    className="h-full rounded-full bg-gradient-to-r from-amber-600 via-amber-500 to-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.45)]"
+                    className="h-full rounded-full bg-gradient-to-r from-primary/70 to-primary shadow-[0_0_18px_var(--glow)]"
                     role="progressbar"
                     aria-valuenow={progress.percent}
                     aria-valuemin={0}
@@ -232,15 +231,15 @@ export function PresentBoard({ id }: { id: string }) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.3 }}
-                  className="mx-auto mt-7 flex max-w-3xl items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-left backdrop-blur transition-colors hover:border-amber-400/40 hover:bg-white/[0.09]"
+                  className="mx-auto mt-7 flex max-w-3xl items-center gap-3 rounded-2xl border border-white/10 bg-card px-4 py-3 text-left backdrop-blur transition-colors hover:border-primary/50 hover:bg-white/[0.07]"
                 >
                   <span className="min-w-0 flex-1 text-center">
-                    <span className="block text-[10px] font-semibold uppercase tracking-[0.25em] text-zinc-500">
+                    <span className="block text-[10px] font-semibold uppercase tracking-[0.25em] text-muted-foreground/70">
                       Latest result
                     </span>
-                    <span className="mt-1 block text-sm font-semibold text-white sm:text-base">
+                    <span className="mt-1 block text-sm font-semibold text-foreground sm:text-base">
                       {latest.gameName}
-                      <span className="font-normal text-zinc-400">
+                      <span className="font-normal text-muted-foreground">
                         {' '}
                         · Cat {latest.divisionCode}
                         {latest.subEventIndex > 1 ? ` · Slot ${latest.subEventIndex}` : ''}
@@ -259,23 +258,55 @@ export function PresentBoard({ id }: { id: string }) {
                     </span>
                   </span>
                   <ChevronRight
-                    className="h-5 w-5 shrink-0 text-zinc-500 transition-colors"
+                    className="h-5 w-5 shrink-0 text-muted-foreground/60 transition-colors"
                     aria-hidden
                   />
                 </motion.a>
               ) : null}
             </AnimatePresence>
 
+            {/* Act switch — center standings or the student ranking
+                stage. Only offered when the tournament actually
+                tracks students. */}
+            {hasStudents ? (
+              <div className="mt-9 flex justify-center">
+                <RankingsModeToggle mode={mode} onChange={setMode} />
+              </div>
+            ) : null}
+
+            {mode === 'students' ? (
+              /* The student ranking — awards-ceremony podium reveal,
+                 then the live field. */
+              <div className="mt-6">
+                <div className="mb-3 flex items-center justify-between px-1">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+                    Student ranking
+                  </h2>
+                  {updatedAt ? (
+                    <span className="text-[11px] tabular-nums text-muted-foreground/70">
+                      Updated{' '}
+                      {new Date(updatedAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                      })}
+                    </span>
+                  ) : null}
+                </div>
+                <StudentRankingsStage rows={studentStandings} />
+              </div>
+            ) : (
+            <>
             {/* Leaderboard — table on screens, stacked cards on phones.
                 The section label says what this page is (the overall
                 standings, not one event) before a single row is read. */}
             <div className="mt-10">
               <div className="mb-3 flex items-center justify-between px-1">
-                <h2 className="text-[11px] font-semibold uppercase tracking-[0.3em] text-zinc-500">
+                <h2 className="text-[11px] font-semibold uppercase tracking-[0.3em] text-muted-foreground">
                   Overall standings
                 </h2>
                 {updatedAt ? (
-                  <span className="text-[11px] tabular-nums text-zinc-500">
+                  <span className="text-[11px] tabular-nums text-muted-foreground/70">
                     Updated{' '}
                     {new Date(updatedAt).toLocaleTimeString([], {
                       hour: '2-digit',
@@ -291,12 +322,12 @@ export function PresentBoard({ id }: { id: string }) {
                 animate={{ rotateX: 0, y: 0, opacity: 1 }}
                 transition={{ duration: 0.95, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
                 style={{ transformOrigin: 'top center' }}
-                className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/60 shadow-2xl shadow-black/60 backdrop-blur"
+                className="overflow-hidden rounded-2xl border border-white/10 bg-card shadow-2xl shadow-black/40 backdrop-blur"
               >
                 {/* Screens: the full table */}
                 <table className="hidden w-full min-w-[640px] border-collapse text-left sm:table">
                   <thead>
-                    <tr className="border-b border-white/10 bg-zinc-900/90 text-xs uppercase tracking-widest text-zinc-400">
+                    <tr className="border-b border-white/10 bg-secondary/50 text-xs uppercase tracking-widest text-muted-foreground">
                       <th className="px-4 py-4 text-center font-semibold sm:px-6">Rank</th>
                       <th className="px-4 py-4 font-semibold sm:px-6">Center</th>
                       <th className="px-4 py-4 font-semibold sm:px-6">Name</th>
@@ -309,7 +340,7 @@ export function PresentBoard({ id }: { id: string }) {
                       <th className="px-4 py-4 text-center font-semibold text-orange-400/90 sm:px-6">
                         3rd (×{tournament?.pointsThird ?? 25})
                       </th>
-                      <th className="px-4 py-4 text-right font-semibold text-white sm:px-6">Total</th>
+                      <th className="px-4 py-4 text-right font-semibold text-foreground sm:px-6">Total</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -326,7 +357,7 @@ export function PresentBoard({ id }: { id: string }) {
                           layout: { type: 'spring', stiffness: 300, damping: 32 },
                         }}
                         className={cn(
-                          'border-b border-white/5 border-l-4 transition-colors last:border-0 hover:bg-zinc-800/40',
+                          'border-b border-white/5 border-l-4 transition-colors last:border-0 hover:bg-white/[0.04]',
                           rankStyle(row.rank)
                         )}
                       >
@@ -336,24 +367,24 @@ export function PresentBoard({ id }: { id: string }) {
                           </span>
                         </td>
                         <td className="px-4 py-4 sm:px-6">
-                          <span className="text-2xl font-semibold tabular-nums tracking-wide text-white sm:text-3xl">
+                          <span className="text-2xl font-semibold tabular-nums tracking-wide text-foreground sm:text-3xl">
                             {row.centerCode}
                           </span>
                         </td>
-                        <td className="px-4 py-4 text-zinc-300 sm:px-6">
-                          {row.centerName || <span className="text-zinc-500">—</span>}
+                        <td className="px-4 py-4 text-muted-foreground sm:px-6">
+                          {row.centerName || <span className="text-muted-foreground/50">—</span>}
                         </td>
-                        <td className={cn('px-4 py-4 text-center text-xl font-semibold sm:px-6', row.gold > 0 ? 'text-amber-400' : 'text-zinc-600')}>
+                        <td className={cn('px-4 py-4 text-center text-xl font-semibold sm:px-6', row.gold > 0 ? 'text-amber-400' : 'text-foreground/25')}>
                           <AnimatedNumber value={row.gold} />
                         </td>
-                        <td className={cn('px-4 py-4 text-center text-xl font-semibold sm:px-6', row.silver > 0 ? 'text-zinc-200' : 'text-zinc-600')}>
+                        <td className={cn('px-4 py-4 text-center text-xl font-semibold sm:px-6', row.silver > 0 ? 'text-zinc-200' : 'text-foreground/25')}>
                           <AnimatedNumber value={row.silver} />
                         </td>
-                        <td className={cn('px-4 py-4 text-center text-xl font-semibold sm:px-6', row.bronze > 0 ? 'text-orange-400' : 'text-zinc-600')}>
+                        <td className={cn('px-4 py-4 text-center text-xl font-semibold sm:px-6', row.bronze > 0 ? 'text-orange-400' : 'text-foreground/25')}>
                           <AnimatedNumber value={row.bronze} />
                         </td>
                         <td className="px-4 py-4 text-right sm:px-6">
-                          <span className="text-3xl font-semibold text-white drop-shadow-[0_2px_12px_rgba(255,255,255,0.15)] sm:text-4xl">
+                          <span className="text-3xl font-semibold text-foreground drop-shadow-[0_2px_12px_rgba(255,255,255,0.15)] sm:text-4xl">
                             <AnimatedNumber value={row.total} />
                           </span>
                         </td>
@@ -361,7 +392,7 @@ export function PresentBoard({ id }: { id: string }) {
                     ))}
                     {standings.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-6 py-16 text-center text-zinc-400">
+                        <td colSpan={7} className="px-6 py-16 text-center text-muted-foreground">
                           Standings appear here as soon as results are recorded.
                         </td>
                       </tr>
@@ -389,28 +420,28 @@ export function PresentBoard({ id }: { id: string }) {
                         <RankIcon rank={row.rank} />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-2xl font-semibold tabular-nums tracking-wide text-white">
+                        <span className="block text-2xl font-semibold tabular-nums tracking-wide text-foreground">
                           {row.centerCode}
                         </span>
                         {row.centerName ? (
-                          <span className="block truncate text-[13px] text-zinc-400">{row.centerName}</span>
+                          <span className="block truncate text-[13px] text-muted-foreground">{row.centerName}</span>
                         ) : null}
-                        <span className="mt-1 flex items-center gap-2.5 text-xs font-medium text-zinc-400 tabular-nums">
+                        <span className="mt-1 flex items-center gap-2.5 text-xs font-medium text-muted-foreground/80 tabular-nums">
                           <span className="text-amber-400/90">1st × {row.gold}</span>
                           <span>2nd × {row.silver}</span>
                           <span className="text-orange-400/90">3rd × {row.bronze}</span>
                         </span>
                       </span>
                       <span className="shrink-0 text-right">
-                        <span className="block text-3xl font-semibold text-white tabular-nums">
+                        <span className="block text-3xl font-semibold text-foreground tabular-nums">
                           <AnimatedNumber value={row.total} />
                         </span>
-                        <span className="block text-[10px] uppercase tracking-wider text-zinc-500">pts</span>
+                        <span className="block text-[10px] uppercase tracking-wider text-muted-foreground/60">pts</span>
                       </span>
                     </motion.div>
                   ))}
                   {standings.length === 0 ? (
-                    <p className="px-6 py-14 text-center text-sm text-zinc-400">
+                    <p className="px-6 py-14 text-center text-sm text-muted-foreground">
                       Standings appear here as soon as results are recorded.
                     </p>
                   ) : null}
@@ -418,15 +449,19 @@ export function PresentBoard({ id }: { id: string }) {
               </motion.div>
               </div>
             </div>
+            </>
+            )}
 
             {/* Footer meta */}
-            <p className="mt-5 flex flex-wrap items-center justify-center gap-3 text-[11px] text-zinc-500">
-              <span className="flex items-center gap-1.5">
-                <Trophy className="h-3.5 w-3.5" aria-hidden />
-                Tie-break order: total, then first, second and third places
-              </span>
+            <p className="mt-5 flex flex-wrap items-center justify-center gap-3 text-[11px] text-muted-foreground/70">
+              {mode === 'centers' ? (
+                <span className="flex items-center gap-1.5">
+                  <Trophy className="h-3.5 w-3.5" aria-hidden />
+                  Tie-break order: total, then first, second and third places
+                </span>
+              ) : null}
             </p>
-            <p className="mt-3 text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-zinc-600">
+            <p className="mt-3 text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-foreground/30">
               Tourny Lite
             </p>
           </>

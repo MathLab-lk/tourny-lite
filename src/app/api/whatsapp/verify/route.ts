@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import {
-  getWhatsAppConfig,
+  getWahaMe,
   listWahaGroups,
   listWahaSessions,
+  refreshWahaGroups,
+  resolveWahaCredentials,
   WahaError,
   type WahaGroupInfo,
   type WahaSessionInfo,
@@ -12,13 +14,16 @@ import {
 /**
  * Administrator only: verifies a WhatsApp connection before saving.
  *
- *  - { baseUrl, apiKey }            → checks the server + API key,
- *                                     returns the available sessions
- *  - { baseUrl, apiKey, session }   → additionally loads the group
- *                                     list for that session
+ *  - { baseUrl, apiKey|username+password }          → sessions on the server
+ *  - { …, session }                                 → + that session's groups
+ *  - { …, session, refresh: true }                  → groups re-synced first
  *
- * An empty `apiKey` reuses the stored key, so a saved connection can
- * be re-verified without retyping the secret.
+ * When the chosen session is WORKING, the response also carries `me`
+ * — the WhatsApp account behind it, so the card can show which
+ * number is broadcasting.
+ *
+ * Blank credential fields reuse the stored values, so a saved
+ * connection can be re-verified without retyping any secret.
  */
 export async function POST(req: NextRequest) {
   const guard = await requireRole('admin')
@@ -26,30 +31,15 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const baseUrl = typeof body.baseUrl === 'string' ? body.baseUrl.trim() : ''
-    if (!baseUrl || !/^https?:\/\//i.test(baseUrl)) {
-      return NextResponse.json(
-        { error: 'Enter the WhatsApp server address (https://…).' },
-        { status: 400 }
-      )
+    const resolved = await resolveWahaCredentials(body)
+    if ('error' in resolved) {
+      return NextResponse.json({ error: resolved.error }, { status: 400 })
     }
-    const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : ''
+    const { creds } = resolved
     const session = typeof body.session === 'string' ? body.session.trim() : ''
+    const refresh = body.refresh === true
 
-    // Prefer the typed key; fall back to the stored one.
-    let effectiveKey = apiKey
-    if (!effectiveKey) {
-      const stored = await getWhatsAppConfig()
-      effectiveKey = stored?.apiKey ?? ''
-    }
-    if (!effectiveKey) {
-      return NextResponse.json(
-        { error: 'Enter the API key of the WhatsApp server.' },
-        { status: 400 }
-      )
-    }
-
-    const sessions: WahaSessionInfo[] = await listWahaSessions(baseUrl, effectiveKey)
+    const sessions: WahaSessionInfo[] = await listWahaSessions(creds)
     if (!session) {
       return NextResponse.json({ ok: true, sessions })
     }
@@ -61,8 +51,14 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
-    const groups: WahaGroupInfo[] = await listWahaGroups(baseUrl, effectiveKey, session)
-    return NextResponse.json({ ok: true, session: current, sessions, groups })
+    const groups: WahaGroupInfo[] = refresh
+      ? await refreshWahaGroups(creds, session)
+      : await listWahaGroups(creds, session)
+
+    // Which account answers — only meaningful while it is connected.
+    const me = current.status === 'WORKING' ? await getWahaMe(creds, session) : null
+
+    return NextResponse.json({ ok: true, session: current, sessions, groups, me })
   } catch (err) {
     const { message, status } =
       err instanceof WahaError

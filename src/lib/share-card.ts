@@ -18,6 +18,14 @@ import type { EventDTO, TournamentDetailDTO } from '@/lib/types'
 // (the starfield ghosts through at 90% panel opacity), one
 // steel-blue accent, and gold reserved for the champion.
 //
+// Each broadcast type carries its own silhouette, so a glance at
+// the thumbnail tells the story before a word is read:
+//   · event result → the podium (2nd · 1st · 3rd columns on
+//     pedestals — one moment of victory, gold)
+//   · standings    → the classification table (one panel, hairline
+//     rows, G/S/B columns — the running season, steel blue)
+// Never a list of look-alike rows for both.
+//
 // Every text element is fitted with measured widths (card-fonts)
 // so long center or game names shrink before they ever overflow.
 // ─────────────────────────────────────────────────────────────
@@ -384,49 +392,142 @@ function svgDocument(
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}">\n${defs()}\n<rect width="${W}" height="${height}" fill="url(#gBg)"/>\n${glowRect}\n${starfield(W, height, quietBands)}\n${body}\n</svg>`
 }
 
-/** A podium row — medal coin, center identity, points. The
- *  champion's row is taller with a larger coin and a gold rim, so
- *  the eye lands on the winner first; silver and bronze read as
- *  the supporting cast. Centers without a name get their code as a
- *  big, confident team-number. */
-function podiumRow(
-  top: number,
+/** A small gold crown — the champion's flourish above their coin. */
+function crown(cx: number, cy: number, s: number): string {
+  const body = [
+    `M ${cx - s} ${cy + s * 0.42}`,
+    `L ${cx - s} ${cy - s * 0.36}`,
+    `L ${cx - s * 0.52} ${cy - 0.02 * s}`,
+    `L ${cx} ${cy - s * 0.52}`,
+    `L ${cx + s * 0.52} ${cy - 0.02 * s}`,
+    `L ${cx + s} ${cy - s * 0.36}`,
+    `L ${cx + s} ${cy + s * 0.42}`,
+    'Z',
+  ].join(' ')
+  return [
+    `<path d="${body}" fill="url(#gGold)" stroke="${GOLD_EDGE}" stroke-width="2"/>`,
+    `<circle cx="${cx}" cy="${cy + s * 0.1}" r="${Math.max(2, s * 0.09)}" fill="#FFF6DC"/>`,
+  ].join('')
+}
+
+/** One podium column — the medal coin, the center identity and the
+ *  points stacked above a rank pedestal (gold, silver or bronze,
+ *  tallest for the champion). The classic podium silhouette: at any
+ *  thumbnail size this reads "one event's winners" before a word is
+ *  read — which is exactly why the standings broadcast is a table,
+ *  never this shape. */
+function podiumColumn(
+  x: number,
+  w: number,
+  floorY: number,
   rank: 1 | 2 | 3,
-  place: { code: string; name: string; location?: string },
+  place: { code: string; name: string },
   pts: number
-): { svg: string; bottom: number } {
+): string {
   const champ = rank === 1
-  const H = champ ? 176 : 140
-  const r = champ ? 50 : 42
-  const badgeX = M + 28 + r
-  const nameX = M + 28 + 2 * r + (champ ? 26 : 24)
-  const pointsEnd = W - M - 30
-  const nameMax = pointsEnd - 200 - nameX
-  const parts: string[] = [
-    panel(M, top, CW, H, 28, champ ? GOLD_EDGE : undefined),
-    medalBadge(badgeX, top + H / 2, r, rank),
-  ]
-  if (place.name) {
-    const f = fit(place.name, champ ? 'semibold' : 'medium', champ ? 42 : 36, nameMax, champ ? 32 : 28)
-    parts.push(text(f.text, { x: nameX, y: champ ? top + 66 : top + 54, size: f.size, weight: champ ? 'semibold' : 'medium', fill: INK }))
-    const c = chip(place.code, nameX, champ ? top + 84 : top + 72, { height: champ ? 52 : 48 })
-    if (c) parts.push(c.svg)
-  } else if (place.location) {
-    parts.push(text(place.code, { x: nameX, y: champ ? top + 76 : top + 62, size: champ ? 46 : 40, weight: 'semibold', fill: INK }))
-    const loc = fit(place.location, 'regular', 26, nameMax, 22)
-    parts.push(text(loc.text, { x: nameX, y: champ ? top + 120 : top + 102, size: loc.size, weight: 'regular', fill: MUTED }))
-  } else {
-    parts.push(text(place.code, { x: nameX, y: champ ? top + 104 : top + 84, size: champ ? 46 : 40, weight: 'semibold', fill: INK }))
-  }
-  const big = champ ? 52 : 46
-  const small = champ ? 28 : 26
+  const skins = {
+    1: { grad: 'gGold', ring: '#C29410', numeral: '#FFFFFF' },
+    2: { grad: 'gSilver', ring: '#8A948E', numeral: '#3C453F' },
+    3: { grad: 'gBronze', ring: '#96562A', numeral: '#FFFFFF' },
+  }[rank]
+  const pedH = champ ? 212 : rank === 2 ? 154 : 120
+  const coinR = champ ? 52 : 44
+  const cx = x + w / 2
+  const py = floorY - pedH
+  const parts: string[] = []
+
+  // The pedestal — a lit block with a specular rim and the big rank
+  // numeral stamped into it, standing on the stage floor.
   parts.push(
-    `<text x="${pointsEnd}" y="${top + H / 2 + (champ ? 18 : 12)}" text-anchor="end" font-family="${LATIN}">` +
+    `<rect x="${x + 8}" y="${py + 14}" width="${w - 16}" height="${pedH}" rx="16" fill="#06070B" opacity="0.5" filter="url(#fSoft)"/>`,
+    `<rect x="${x}" y="${py}" width="${w}" height="${pedH}" rx="16" fill="url(#${skins.grad})" stroke="${skins.ring}" stroke-width="3"/>`,
+    `<rect x="${x + 10}" y="${py + 4}" width="${Math.max(0, w - 20)}" height="4" rx="2" fill="#FFFFFF" opacity="${champ ? 0.42 : 0.28}"/>`,
+    `<g opacity="${champ ? 0.4 : 0.32}">${text(String(rank), {
+      x: cx,
+      y: py + pedH / 2 + (champ ? 50 : 36),
+      size: champ ? 128 : Math.round(pedH * 0.66),
+      weight: 'semibold',
+      fill: skins.numeral,
+      anchor: 'middle',
+    })}</g>`
+  )
+
+  // The identity stack, standing on the pedestal.
+  const big = champ ? 44 : 38
+  const small = champ ? 26 : 24
+  let by = py - 20
+  parts.push(
+    `<text x="${cx}" y="${by}" text-anchor="middle" font-family="${LATIN}">` +
       `<tspan font-size="${big}" font-weight="600" fill="${INK}">${pts}</tspan>` +
       `<tspan dx="9" font-size="${small}" font-weight="400" fill="${MUTED}">pts</tspan>` +
       `</text>`
   )
-  return { svg: parts.join('\n'), bottom: top + H }
+  by -= 44
+  if (place.name) {
+    const f = fit(place.name, 'regular', 25, w - 4, 19)
+    parts.push(text(f.text, { x: cx, y: by, size: f.size, weight: 'regular', fill: MUTED, anchor: 'middle' }))
+    by -= 38
+  }
+  const codeSize = champ ? 46 : 40
+  const fcode = fit(place.code, 'semibold', codeSize, w - 4, Math.round(codeSize * 0.72))
+  parts.push(text(fcode.text, { x: cx, y: by, size: fcode.size, weight: 'semibold', fill: INK, anchor: 'middle' }))
+  by -= fcode.size + 28
+  const coinCy = by - coinR
+  parts.push(medalBadge(cx, coinCy, coinR, rank))
+  if (champ) parts.push(crown(cx, coinCy - coinR - 36, 26))
+  return parts.join('\n')
+}
+
+/** The podium stage — one glass floor panel, the winners' columns
+ *  standing on it in classic arrangement (2nd · 1st · 3rd), pedestal
+ *  bases aligned. Missing places simply leave a slot out. */
+function podiumStage(
+  top: number,
+  places: { code: string; rank: 1 | 2 | 3 }[],
+  ptsByRank: number[],
+  nameByCode: Map<string, { centerName: string }>
+): { svg: string; bottom: number } {
+  const pad = 26
+  const gap = 16
+  const order = ([2, 1, 3] as const)
+    .map((rank) => places.find((p) => p.rank === rank))
+    .filter((p): p is { code: string; rank: 1 | 2 | 3 } => Boolean(p))
+  const n = order.length
+  if (n === 0) return { svg: '', bottom: top }
+
+  const stackH = (rank: 1 | 2 | 3, hasName: boolean): number => {
+    const coinR = rank === 1 ? 52 : 44
+    const pedH = rank === 1 ? 212 : rank === 2 ? 154 : 120
+    return 20 + 48 + (hasName ? 38 : 0) + (rank === 1 ? 46 : 40) + 28 + coinR * 2 + (rank === 1 ? 62 : 0) + pedH
+  }
+  const maxStack = Math.max(
+    ...order.map((p) => stackH(p.rank, Boolean(nameByCode.get(p.code)?.centerName)))
+  )
+  const panelH = pad + maxStack + pad + 14
+  const floorY = top + panelH - pad - 14
+  const colW = n === 1 ? 420 : Math.floor((CW - 2 * pad - (n - 1) * gap) / n)
+  const stageW = n * colW + (n - 1) * gap
+  const startX = M + Math.floor((CW - stageW) / 2)
+
+  const parts: string[] = [panel(M, top, CW, panelH, 30)]
+  // The floor line the pedestals stand on — one hairline stage edge.
+  parts.push(
+    `<rect x="${M + 24}" y="${floorY + 8}" width="${CW - 48}" height="2" rx="1" fill="#FFFFFF" opacity="0.1"/>`
+  )
+  order.forEach((p, i) => {
+    const center = nameByCode.get(p.code)
+    parts.push(
+      podiumColumn(
+        startX + i * (colW + gap),
+        colW,
+        floorY,
+        p.rank,
+        { code: p.code, name: center?.centerName ?? '' },
+        ptsByRank[p.rank - 1]
+      )
+    )
+  })
+  return { svg: parts.join('\n'), bottom: top + panelH }
 }
 
 // ── event card ───────────────────────────────────────────────
@@ -488,18 +589,9 @@ export function buildEventCard(
   y = chipTop + 58 + 30
 
   const medalPts = [tournament.pointsFirst, tournament.pointsSecond, tournament.pointsThird]
-  for (const { code, rank } of places) {
-    const center = nameByCode.get(code)
-    const row = podiumRow(
-      y,
-      rank,
-      { code, name: center?.centerName ?? '', location: center?.location ?? '' },
-      medalPts[rank - 1]
-    )
-    parts.push(row.svg)
-    y = row.bottom + (rank === 1 ? 18 : 16)
-  }
-  y += 22
+  const stage = podiumStage(y, places, medalPts, nameByCode)
+  parts.push(stage.svg)
+  y = stage.bottom + 30
 
   // The quiet overall line — the top of the table without the
   // podium fanfare: names and points, nothing else.
@@ -543,15 +635,114 @@ export function buildEventCard(
 
 // ── standings card ───────────────────────────────────────────
 
-const MAX_STANDINGS_ROWS = 10
+// Column geometry of the classification table — one source of truth
+// for the header and every row, so the numerals always line up.
+const TBL = {
+  coinCx: M + 46,
+  coinR: 30,
+  nameX: M + 98,
+  nameMax: 452,
+  goldCx: 676,
+  silverCx: 754,
+  bronzeCx: 832,
+  pointsEnd: W - M - 30,
+  headerH: 66,
+  rowH: 104,
+} as const
+
+/** The header row of the classification table — small caps labels and
+ *  three medal dots, so the G · S · B columns explain themselves. */
+function tableHeader(top: number): string {
+  const label = (t: string, x: number, anchor: 'start' | 'middle' | 'end' = 'start') =>
+    text(t, { x, y: top + 44, size: 22, weight: 'semibold', fill: FAINT, letterSpacing: 3, anchor })
+  const dot = (cx: number, color: string) =>
+    `<circle cx="${cx - 20}" cy="${top + 36}" r="7" fill="${color}"/>`
+  return [
+    label('#', TBL.coinCx, 'middle'),
+    label('CENTER', TBL.nameX),
+    dot(TBL.goldCx, GOLD),
+    label('G', TBL.goldCx, 'middle'),
+    dot(TBL.silverCx, '#C9CFC9'),
+    label('S', TBL.silverCx, 'middle'),
+    dot(TBL.bronzeCx, '#DCA36C'),
+    label('B', TBL.bronzeCx, 'middle'),
+    label('POINTS', TBL.pointsEnd, 'end'),
+    `<rect x="${M + 26}" y="${top + TBL.headerH - 2}" width="${CW - 52}" height="2" rx="1" fill="#FFFFFF" opacity="0.12"/>`,
+  ].join('\n')
+}
+
+/** One row of the classification table — hairline divided, medal
+ *  coin, gold/silver/bronze counts, total right-aligned. It reads as
+ *  a league table (the running season), never as a podium moment. */
+function tableRow(
+  top: number,
+  row: { rank: number; centerCode: string; centerName: string; gold: number; silver: number; bronze: number; total: number },
+  location: string | undefined,
+  dividerBelow: boolean
+): string {
+  const parts: string[] = []
+  if (dividerBelow) {
+    parts.push(`<rect x="${M + 26}" y="${top + TBL.rowH - 1}" width="${CW - 52}" height="1.5" rx="0.75" fill="#FFFFFF" opacity="0.07"/>`)
+  }
+  // The leader carries a small gold tab on the left edge — who is
+  // winning overall is the one question every reader brings.
+  if (row.rank === 1) {
+    parts.push(`<rect x="${M + 5}" y="${top + 24}" width="5" height="${TBL.rowH - 48}" rx="2.5" fill="url(#gGold)"/>`)
+  }
+  if (row.rank <= 3) {
+    parts.push(medalBadge(TBL.coinCx, top + TBL.rowH / 2, TBL.coinR, row.rank as 1 | 2 | 3))
+  } else {
+    // Neutral coin — same geometry as the medals so every row's
+    // identity column lines up, ranks beyond the podium stay quiet.
+    parts.push(
+      `<circle cx="${TBL.coinCx}" cy="${top + TBL.rowH / 2}" r="${TBL.coinR}" fill="none" stroke="${COIN_EDGE}" stroke-opacity="0.95" stroke-width="2"/>`,
+      text(String(row.rank), { x: TBL.coinCx, y: top + TBL.rowH / 2 + 12, size: 32, weight: 'semibold', fill: MUTED, anchor: 'middle' })
+    )
+  }
+  const nameY = row.centerName ? top + 42 : top + 52
+  const fcode = fit(row.centerCode, 'semibold', 34, TBL.nameMax, 28)
+  parts.push(text(fcode.text, { x: TBL.nameX, y: nameY, size: fcode.size, weight: 'semibold', fill: INK }))
+  if (row.centerName) {
+    const f = fit(row.centerName, 'regular', 24, TBL.nameMax, 19)
+    parts.push(text(f.text, { x: TBL.nameX, y: top + 78, size: f.size, weight: 'regular', fill: MUTED }))
+  } else if (location) {
+    const f = fit(location, 'regular', 22, TBL.nameMax, 18)
+    parts.push(text(f.text, { x: TBL.nameX, y: top + 80, size: f.size, weight: 'regular', fill: MUTED }))
+  }
+  const count = (v: number, cx: number, lit: string) =>
+    text(String(v), {
+      x: cx,
+      y: top + TBL.rowH / 2 + 12,
+      size: 30,
+      weight: 'semibold',
+      fill: v > 0 ? lit : FAINT,
+      anchor: 'middle',
+    })
+  parts.push(
+    count(row.gold, TBL.goldCx, GOLD),
+    count(row.silver, TBL.silverCx, '#D9DED9'),
+    count(row.bronze, TBL.bronzeCx, '#DCA36C'),
+    text(String(row.total), {
+      x: TBL.pointsEnd,
+      y: top + TBL.rowH / 2 + 16,
+      size: 46,
+      weight: 'semibold',
+      fill: INK,
+      anchor: 'end',
+    })
+  )
+  return parts.join('\n')
+}
 
 export function buildStandingsCard(
   detail: TournamentDetailDTO,
   opts?: { presentUrl?: string | null }
 ): ShareCard | null {
   const { tournament } = detail
-  const scored = detail.standings.filter((r) => r.total > 0)
-  if (scored.length === 0) return null
+  // The whole table, not just the centers that have scored — a
+  // standings broadcast shows everyone where they stand, 0 included.
+  const rows = detail.standings
+  if (rows.length === 0) return null
 
   const parts: string[] = []
   const quiet: Array<[number, number]> = [[218, 268]] // organizer line
@@ -559,61 +750,25 @@ export function buildStandingsCard(
   parts.push(head.svg)
   let y = head.bottom + 46
 
-  const shown = scored.slice(0, MAX_STANDINGS_ROWS)
-  const hidden = scored.length - shown.length
-  const pointsEnd = W - M - 30
   const locationByCode = new Map(detail.centers.map((c) => [c.centerCode, c.location]))
 
-  for (const row of shown) {
-    const H = 112
-    parts.push(panel(M, y, CW, H, 28))
-    // The leader carries a small gold tab on the left edge — who is
-    // winning overall is the one question every reader brings.
-    if (row.rank === 1) {
-      parts.push(`<rect x="${M + 5}" y="${y + 26}" width="5" height="${H - 52}" rx="2.5" fill="url(#gGold)"/>`)
-    }
-    if (row.rank <= 3) {
-      parts.push(medalBadge(M + 26 + 36, y + H / 2, 36, row.rank as 1 | 2 | 3))
-    } else {
-      // Neutral coin — same geometry as the medals so every row's
-      // identity column lines up, ranks beyond the podium stay quiet.
-      parts.push(
-        `<circle cx="${M + 62}" cy="${y + H / 2}" r="36" fill="none" stroke="${COIN_EDGE}" stroke-opacity="0.95" stroke-width="2"/>`,
-        text(String(row.rank), { x: M + 62, y: y + H / 2 + 14, size: 38, weight: 'semibold', fill: MUTED, anchor: 'middle' })
-      )
-    }
-    const nameX = M + 112
-    const nameMax = pointsEnd - 200 - nameX
-    if (row.centerName) {
-      const f = fit(row.centerName, 'medium', 34, nameMax, 26)
-      parts.push(text(f.text, { x: nameX, y: y + 46, size: f.size, weight: 'medium', fill: INK }))
-      const c = chip(row.centerCode, nameX, y + 58, { height: 44 })
-      if (c) parts.push(c.svg)
-    } else {
-      const location = locationByCode.get(row.centerCode)
-      if (location) {
-        parts.push(text(row.centerCode, { x: nameX, y: y + 50, size: 38, weight: 'semibold', fill: INK }))
-        const loc = fit(location, 'regular', 24, nameMax, 20)
-        parts.push(text(loc.text, { x: nameX, y: y + 82, size: loc.size, weight: 'regular', fill: MUTED }))
-      } else {
-        parts.push(text(row.centerCode, { x: nameX, y: y + 70, size: 38, weight: 'semibold', fill: INK }))
-      }
-    }
+  // One glass panel, one classification table — hairline rows inside,
+  // never stacked cards. This shape is the standings' identity: a
+  // running league table, visually the opposite of the event podium.
+  const tableH = TBL.headerH + rows.length * TBL.rowH
+  parts.push(panel(M, y, CW, tableH, 28))
+  parts.push(tableHeader(y))
+  rows.forEach((row, i) => {
     parts.push(
-      `<text x="${pointsEnd}" y="${y + 64}" text-anchor="end" font-family="${LATIN}">` +
-        `<tspan font-size="42" font-weight="600" fill="${INK}">${row.total}</tspan>` +
-        `<tspan dx="9" font-size="24" font-weight="400" fill="${MUTED}">pts</tspan>` +
-        `</text>`
+      tableRow(
+        y + TBL.headerH + i * TBL.rowH,
+        row,
+        locationByCode.get(row.centerCode),
+        i < rows.length - 1
+      )
     )
-    y += H + 14
-  }
-  y -= 14
-
-  if (hidden > 0) {
-    parts.push(text(`and ${hidden} more center${hidden === 1 ? '' : 's'} below`, { x: W / 2, y: y + 52, size: 28, weight: 'regular', fill: FAINT, anchor: 'middle' }))
-    quiet.push([y + 18, y + 58])
-    y += 66
-  }
+  })
+  y += tableH
 
   if (opts?.presentUrl) {
     const bar = watchLiveBar(y + 22, opts.presentUrl)

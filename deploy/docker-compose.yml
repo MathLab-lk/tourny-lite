@@ -1,30 +1,67 @@
 # ------------------------------------------------------------------------------
-# Tourny Lite — Production Compose
-# Single self-contained container. The SQLite database is embedded and
-# persists in the ./data volume — NO external database container is needed.
-# Hard resource ceiling keeps the container well inside a small VM budget
-# alongside other services.
+# Tourny Lite — two-slot deployment (stable + dev)
 #
-#   docker compose -f deploy/docker-compose.yml up -d --build
+# One repo folder builds TWO containers, each from its own branch. The build
+# context of each service is a git worktree managed by deploy/deploy.sh, so
+# the stable image is always exactly the stable branch and the dev image is
+# exactly the dev branch.
+#
+#   stable → tourny-stable → 127.0.0.1:8090 (Cloudflare Tunnel → public)
+#   dev    → tourny-dev    → 127.0.0.1:8091 (localhost only)
+#
+# The dev slot gets a separate session cookie name and an amber "Exp"
+# badge (APP_VARIANT) — browsers scope cookies by domain, not port, so
+# without that the two slots would keep signing each other out of the
+# same browser.
+#
+# Which branch each slot tracks is configured in deploy/deploy.env (and can
+# be overridden in deploy/deploy.local.env) — NOT in this file. Worktrees and
+# per-slot secrets are created by deploy/deploy.sh:
+#
+#   ./deploy/deploy.sh setup            # first time
+#   ./deploy/deploy.sh update stable    # rebuild one slot
+#   ./deploy/deploy.sh update           # rebuild both
+#
+# Direct `docker compose up` works too, once deploy.sh setup has created
+# deploy/worktrees/<slot> and deploy/env/<slot>.env.
 # ------------------------------------------------------------------------------
 
+name: tourny-lite
+
+x-slot-defaults: &slot-defaults
+  restart: unless-stopped
+  init: true # proper PID 1 signal handling / zombie reaping
+  environment:
+    TZ: Asia/Colombo
+    NODE_ENV: production
+  healthcheck:
+    # Both containers listen on 8090 internally; the host ports differ.
+    test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8090/api"]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 20s
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 services:
-  tournament-app:
+  # ---------------------------------------------------------------- stable ---
+  stable:
+    <<: *slot-defaults
     build:
-      context: ..
+      context: ./worktrees/stable
       dockerfile: deploy/Dockerfile
-    container_name: tourny-lite
-    restart: unless-stopped
-    init: true # proper PID 1 signal handling / zombie reaping
+    image: tourny-lite:stable
+    container_name: tourny-stable
     ports:
       - "127.0.0.1:8090:8090" # strictly localhost — exposed via Cloudflare Tunnel
     volumes:
-      - ./data:/app/db # SQLite database + WAL files
-    environment:
-      - TZ=Asia/Colombo
-      - NODE_ENV=production
-      # Session-signing secret — generate with: openssl rand -hex 32
-      - AUTH_SECRET=${AUTH_SECRET:-change-me-in-production}
+      - ./data-stable:/app/db # SQLite database + WAL files (independent)
+    env_file:
+      - ./env/stable.env # AUTH_SECRET — generated once by deploy.sh setup
     deploy:
       resources:
         limits:
@@ -33,14 +70,35 @@ services:
         reservations:
           cpus: "0.10"
           memory: 64M # normal operational baseline
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8090/api"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+
+  # ------------------------------------------------------------------ dev ----
+  dev:
+    <<: *slot-defaults
+    # Local `environment:` replaces the anchor's map (YAML merge keys do
+    # not deep-merge), so TZ / NODE_ENV are repeated here explicitly.
+    environment:
+      TZ: Asia/Colombo
+      NODE_ENV: production
+      # Distinct cookie so :8090 and :8091 never sign each other out of
+      # the same browser; badge so the dev build is unmistakable at a glance.
+      SESSION_COOKIE_NAME: tourny_session_dev
+      APP_VARIANT: experimental
+    build:
+      context: ./worktrees/dev
+      dockerfile: deploy/Dockerfile
+    image: tourny-lite:dev
+    container_name: tourny-dev
+    ports:
+      - "127.0.0.1:8091:8090" # localhost only — SSH tunnel or optional ingress
+    volumes:
+      - ./data-dev:/app/db # SQLite database + WAL files (independent)
+    env_file:
+      - ./env/dev.env # AUTH_SECRET — generated once by deploy.sh setup
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 384M # smaller ceiling — it shares the VM with stable
+        reservations:
+          cpus: "0.10"
+          memory: 48M

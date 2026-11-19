@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# Stub docker CLI for dry-running deploy/deploy.sh without a docker daemon.
+# Records every invocation to $STUB_DOCKER_LOG (one line per call).
+#
+# Simulation knobs (environment):
+#   STUB_PS_ECHO=1            containers appear running (name/Status queries)
+#   STUB_PORT_SQUATTER=8091   a foreign container publishes port 8091
+#   STUB_PORT_SQUATTER=8090:other-app   … or port 8090 held by "other-app"
+#   STUB_EXP_CONTAINER=1      the retired tourny-lite-exp container exists
+LOG="${STUB_DOCKER_LOG:-/tmp/stub-docker.log}"
+echo "docker $*" >> "$LOG"
+
+cmd="${1:-}"; shift || true
+case "$cmd" in
+  compose)
+    # docker compose -f <file> <subcommand...> — always succeeds.
+    # `logs -f` would follow forever in real life; exit immediately here.
+    exit 0
+    ;;
+  ps)
+    filter=""; fmt=""; all=0
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --filter) filter="$2"; shift 2 ;;
+        --format) fmt="$2"; shift 2 ;;
+        -a|--all) all=1; shift ;;
+        *) shift ;;
+      esac
+    done
+    case "$filter" in
+      publish=*)
+        # Port-occupancy probe from deploy.sh's pre-flight check.
+        if [ -n "${STUB_PORT_SQUATTER:-}" ]; then
+          port="${STUB_PORT_SQUATTER%%:*}"
+          name="${STUB_PORT_SQUATTER#*:}"
+          [ "$name" = "$STUB_PORT_SQUATTER" ] && name="tourny-lite-exp"
+          [ "${filter#publish=}" = "$port" ] && echo "$name"
+        fi
+        exit 0
+        ;;
+      'name=^tourny-lite-exp')
+        # Leftover-experimental-build probe from deploy.sh setup.
+        [ "${STUB_EXP_CONTAINER:-0}" = "1" ] && echo tourny-lite-exp
+        exit 0
+        ;;
+    esac
+    if [ "$filter" = 'name=^tourny-lite$' ]; then
+      # The old single-container deployment does not exist.
+      exit 0
+    fi
+    if [ -n "$fmt" ]; then
+      case "$fmt" in
+        '{{.Names}}')
+          [ "${STUB_PS_ECHO:-0}" = "1" ] && { echo tourny-stable; echo tourny-dev; }
+          ;;
+        '{{.Status}}')
+          [ "${STUB_PS_ECHO:-0}" = "1" ] && echo "Up 2 hours (healthy)"
+          ;;
+      esac
+    fi
+    exit 0
+    ;;
+  exec)
+    # WAL checkpoint inside the container — pretend the node one-liner ran.
+    echo "WAL checkpointed"
+    exit 0
+    ;;
+  image)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      inspect)
+        fmt=""
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --format) fmt="$2"; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        [ -n "$fmt" ] && echo "2026-11-16T00:00:00.000000000Z"
+        exit 0
+        ;;
+      prune)
+        echo "Total reclaimed space: 0B"
+        exit 0
+        ;;
+      *)
+        exit 0
+        ;;
+    esac
+    ;;
+  *)
+    exit 0
+    ;;
+esac

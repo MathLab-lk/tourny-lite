@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getTournamentDetail } from '@/lib/tournament-service'
+import { validateIdPattern } from '@/lib/student-math'
 import { emitTournamentChanged } from '@/lib/bus'
 import { friendlyError, requireRole } from '@/lib/auth'
 
@@ -43,6 +44,11 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
         const n = Number(body[key])
         if (Number.isFinite(n) && n >= 0) data[key] = Math.round(n)
       }
+    }
+    if (typeof body.studentIdPattern === 'string') {
+      const invalid = validateIdPattern(body.studentIdPattern)
+      if (invalid) return NextResponse.json({ error: invalid }, { status: 400 })
+      data.studentIdPattern = body.studentIdPattern.trim()
     }
 
     const updated = await db.tournament.update({ where: { id }, data })

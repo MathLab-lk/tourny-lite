@@ -13,6 +13,7 @@ const FILTERS = [
   { key: 'created', label: 'Recorded' },
   { key: 'updated', label: 'Corrected' },
   { key: 'reset', label: 'Reset' },
+  { key: 'restored', label: 'Restored' },
 ] as const
 
 type FilterKey = (typeof FILTERS)[number]['key']

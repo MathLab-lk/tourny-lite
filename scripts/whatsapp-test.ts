@@ -93,6 +93,12 @@ async function main() {
   console.log(`WhatsApp integration test — app ${BASE} · mock ${MOCK}`)
   const admin = new Client()
   resetLog()
+  // The mock is long-lived and suites create sessions in it — start
+  // every run from its initial state (default + backup), too.
+  await fetch(`${MOCK}/__mock/reset`, {
+    method: 'POST',
+    headers: { 'X-Api-Key': MOCK_KEY },
+  }).catch(() => undefined)
 
   // ═══ 1. Access control ═══
   section('1 · Access control')
@@ -137,6 +143,28 @@ async function main() {
     ok('non-admin cannot verify', jVerify.status === 403, jVerify)
     // tidy up
     if (jCreated.data?.user?.id) await admin.call('DELETE', `/api/admin/users/${jCreated.data.user.id}`)
+  }
+
+  // ═══ 1b. Reset — a clean slate, whatever earlier runs left ═══
+  // The suite asserts "nothing stored" states (sections 2, 3, 4b);
+  // this clears the saved connection through the app's own API so
+  // the run is repeatable on a used database.
+  section('1b · Reset the saved connection')
+  {
+    const reset = await admin.call('PUT', '/api/whatsapp/config', {
+      baseUrl: '',
+      groupChatId: '',
+      groupName: '',
+      username: '',
+      clearApiKey: true,
+      session: 'default',
+      autoEvents: false,
+      publicBaseUrl: '',
+    })
+    ok('reset to a clean slate', reset.status === 200 && reset.data.configured === false && reset.data.apiKeySet === false && reset.data.passwordSet === false, reset.data)
+
+    const check = await admin.call('GET', '/api/whatsapp/config')
+    ok('nothing lingers after the reset', check.data.configured === false && check.data.baseUrl === '' && check.data.username === '' && check.data.passwordSet === false, check.data)
   }
 
   // ═══ 2. Initial config state ═══
@@ -233,6 +261,47 @@ async function main() {
       'real server rejects wrong key with friendly message',
       real.status === 502 && /rejected the API key/i.test(real.data.error),
       real.data
+    )
+  }
+
+  // ═══ 4b. Basic auth (username + password) — LOGIN_PASSWORD WAHA ═══
+  section('4b · Basic auth (username + password)')
+  {
+    // Nothing is stored yet, so these credentials travel alone —
+    // the request carries Authorization: Basic and no X-Api-Key.
+    const basic = await admin.call('POST', '/api/whatsapp/verify', {
+      baseUrl: MOCK,
+      username: 'mock-user',
+      password: 'mock-pass',
+    })
+    ok('username + password verify (no API key)', basic.status === 200 && basic.data.sessions?.length === 2, basic.data)
+
+    const wrongPass = await admin.call('POST', '/api/whatsapp/verify', {
+      baseUrl: MOCK,
+      username: 'mock-user',
+      password: 'wrong-pass',
+    })
+    ok('wrong password rejected', wrongPass.status === 502, wrongPass)
+
+    const noneAuth = await admin.call('POST', '/api/whatsapp/verify', { baseUrl: MOCK })
+    ok(
+      'no credentials at all rejected with guidance',
+      noneAuth.status === 400 && /api key/i.test(noneAuth.data.error ?? ''),
+      noneAuth.data
+    )
+
+    // The session console accepts the same credential styles.
+    const qrBasic = await admin.call('POST', '/api/whatsapp/session', {
+      action: 'qr',
+      session: 'default',
+      baseUrl: MOCK,
+      username: 'mock-user',
+      password: 'mock-pass',
+    })
+    ok(
+      'session console works with basic auth',
+      qrBasic.status === 200 && qrBasic.data.session?.status === 'WORKING' && qrBasic.data.qr === null,
+      qrBasic.data
     )
   }
 
@@ -596,6 +665,128 @@ async function main() {
     ok('no message sent while disabled', readLog().length === before3, readLog().length - before3)
   }
 
+  // ═══ 9b. Auto-share on student mark sheets ═══
+  // The mark-sheet flow records results too (student-rankings mode);
+  // it must announce itself exactly like the podium flow. Regression
+  // guard: the hook used to exist only on POST /api/results, so
+  // student-scored events never auto-shared.
+  section('9b · Auto-share on student mark sheets')
+  {
+    const waitFor = async (cond: () => boolean, ms = 5000): Promise<boolean> => {
+      const deadline = Date.now() + ms
+      while (Date.now() < deadline) {
+        if (cond()) return true
+        await new Promise((r) => setTimeout(r, 200))
+      }
+      return cond()
+    }
+
+    const tournaments = await admin.call('GET', '/api/tournaments')
+    const seeded = tournaments.data.tournaments?.find((t: any) => t.templateId || t.name.includes('Math Competition'))
+    const detail = await admin.call('GET', `/api/tournaments/${seeded.id}`)
+    const centers = detail.data.centers ?? []
+    let open = detail.data.events?.find((e: any) => e.status !== 'completed')
+    if (!open) {
+      // Every seeded slot is completed — append one fresh event.
+      const added = await admin.call('POST', `/api/tournaments/${seeded.id}/events`, {
+        newDivision: { code: 'PROBE', name: 'Auto-share probe division' },
+        newGame: { name: 'Auto-share probe game' },
+        count: 1,
+        scoringMode: 'students',
+      })
+      ok('a fresh event appended', added.status === 200, added)
+      const detail2 = await admin.call('GET', `/api/tournaments/${seeded.id}`)
+      open = detail2.data.events?.find((e: any) => e.status !== 'completed')
+    }
+    ok('an open event is available', Boolean(open), open?.label)
+
+    const enable = await admin.call('PUT', '/api/whatsapp/config', { autoEvents: true })
+    ok('auto-share re-enabled', enable.status === 200 && enable.data.autoEvents === true, enable.data)
+
+    // Two students for center 0, one for center 1 — the per-center
+    // sums derive the podium (center 1 first, center 0 second).
+    const roster = await admin.call('POST', `/api/tournaments/${seeded.id}/students`, {
+      students: [
+        { name: 'Amara Auto-Share', centerId: centers[0].id, grade: '6' },
+        { name: 'Nimal Auto-Share', centerId: centers[0].id, grade: '6' },
+        { name: 'Kasun Auto-Share', centerId: centers[1].id, grade: '6' },
+      ],
+    })
+    ok('probe students added', roster.status === 201 && roster.data.added === 3, roster)
+    const [s1, s2, s3] = roster.data.students
+
+    // A recorded mark sheet → one styled card in the group.
+    const before = readLog().length
+    const sheet = await admin.call('POST', '/api/results/students', {
+      eventId: open.id,
+      scores: [
+        { studentId: s1.id, marks: 55 },
+        { studentId: s2.id, marks: 50 },
+        { studentId: s3.id, marks: 60 },
+      ],
+      notes: 'auto-share student probe',
+    })
+    ok('mark sheet recorded', sheet.status === 201 && Boolean(sheet.data.resultId), sheet)
+    let lines = readLog()
+    const arrived = await waitFor(() => {
+      lines = readLog()
+      return lines.length === before + 1
+    })
+    ok('mark sheet auto-shared', arrived, lines.length - before)
+    const autoMsg = lines[lines.length - 1]
+    ok(
+      'student-result auto-share is the styled event card',
+      autoMsg.kind === 'image' && (autoMsg.caption ?? '').includes('Event result') && (autoMsg.imageBytes ?? 0) > 10_000,
+      autoMsg
+    )
+    ok(
+      'student-result caption carries the guest link to this event',
+      Boolean((autoMsg.caption ?? '').includes(`${BASE}/present/${seeded.id}/event/${open.id}`)),
+      autoMsg.caption
+    )
+
+    // A corrected sheet → a clearly labeled follow-up card.
+    const before2 = readLog().length
+    const fixed = await admin.call('POST', '/api/results/students', {
+      eventId: open.id,
+      scores: [
+        { studentId: s1.id, marks: 55 },
+        { studentId: s2.id, marks: 50 },
+        { studentId: s3.id, marks: 20 },
+      ],
+      reason: 'Auto-share student probe correction',
+    })
+    ok('mark sheet corrected', fixed.status === 200 && fixed.data.isCorrection === true, fixed)
+    const arrived2 = await waitFor(() => {
+      lines = readLog()
+      return lines.length === before2 + 1
+    })
+    ok('mark-sheet correction auto-shared', arrived2, lines.length - before2)
+    const corrMsg = lines[lines.length - 1]
+    ok(
+      'mark-sheet correction labeled on the card',
+      corrMsg.kind === 'image' && (corrMsg.caption ?? '').includes('Corrected result'),
+      corrMsg.caption
+    )
+
+    // Disabled → a mark sheet stays silent (parity with the podium flow).
+    const disable = await admin.call('PUT', '/api/whatsapp/config', { autoEvents: false })
+    ok('auto-share disabled again', disable.data.autoEvents === false, disable.data)
+    const before3 = readLog().length
+    const silent = await admin.call('POST', '/api/results/students', {
+      eventId: open.id,
+      scores: [
+        { studentId: s1.id, marks: 55 },
+        { studentId: s2.id, marks: 50 },
+        { studentId: s3.id, marks: 10 },
+      ],
+      reason: 'Silent mark-sheet probe',
+    })
+    ok('mark sheet recorded with auto-share off', silent.status === 200, silent)
+    await new Promise((r) => setTimeout(r, 1500))
+    ok('no message sent while disabled', readLog().length === before3, readLog().length - before3)
+  }
+
   // ═══ 10. Share-card builder unit checks ═══
   section('10 · Share-card builders (synthetic data)')
   {
@@ -718,14 +909,20 @@ async function main() {
       Boolean(standings?.svg.includes('Kaduwela Center') && standings.svg.includes('>105<') && standings.svg.includes('TOURNY LITE')),
       standings?.caption
     )
+    // The two cards speak with different accents: the event card's
+    // first accent ink is gold (its eyebrow and podium), the standings
+    // card's is steel blue (its eyebrow) — any gold in the standings
+    // comes later, from the medal-count numerals.
+    const firstAccent = (svg: string) => {
+      const gold = svg.indexOf('fill="#E9C64A"')
+      const blue = svg.indexOf('fill="#6FAEE8"')
+      if (gold === -1) return 'blue'
+      if (blue === -1) return 'gold'
+      return gold < blue ? 'gold' : 'blue'
+    }
     ok(
       'event and standings cards are visually distinct (gold event accent vs blue standings accent)',
-      Boolean(
-        card?.svg.includes('fill="#E9C64A"') &&
-          !standings?.svg.includes('fill="#E9C64A"') &&
-          standings.svg.includes('fill="#6FAEE8"') &&
-          !card.svg.includes('fill="#6FAEE8"')
-      ),
+      Boolean(card && standings && firstAccent(card.svg) === 'gold' && firstAccent(standings.svg) === 'blue'),
       'accent check'
     )
     ok(
@@ -744,7 +941,7 @@ async function main() {
     ok('event champion row is emphasized (taller, gold rim)', Boolean(card?.svg.includes('stroke="#D9B44A"')), 'champion rim')
     ok(
       'standings leader carries the gold tab',
-      Boolean(standings?.svg.includes('width="5" height="60" rx="2.5" fill="url(#gGold)"')),
+      Boolean(standings?.svg.includes('width="5" height="56" rx="2.5" fill="url(#gGold)"')),
       'leader tab'
     )
     ok('standings eyebrow reads OVERALL STANDINGS', Boolean(standings?.svg.includes('OVERALL STANDINGS')), 'eyebrow')
@@ -767,7 +964,7 @@ async function main() {
       liveStandings?.caption
     )
 
-    // 12 scored centers → capped at 10 + "and 2 more centers below"
+    // 12 centers — every one of them is on the card, however many
     const many = mkDetail()
     many.standings = Array.from({ length: 12 }, (_, i) => ({
       rank: i + 1,
@@ -779,17 +976,174 @@ async function main() {
       bronze: 0,
       total: 100 - i,
     }))
-    const capped = buildStandingsCard(many)
-    ok('standings card caps at 10 rows and mentions the rest', Boolean(capped?.svg.includes('and 2 more centers below')), capped?.caption)
+    const allShown = buildStandingsCard(many)
+    ok(
+      'standings card shows every center, however many there are',
+      Boolean(allShown?.svg.includes('>111<') && !allShown.svg.includes('more centers below')),
+      allShown?.caption
+    )
+
+    // A center yet to score still gets its row — the broadcast is
+    // the whole table, not only the ones with points.
+    const withZero = mkDetail()
+    withZero.standings = [
+      ...withZero.standings,
+      { rank: 3, centerId: 'c-999', centerCode: '999', centerName: '', gold: 0, silver: 0, bronze: 0, total: 0 },
+    ]
+    const zeroCard = buildStandingsCard(withZero)
+    ok('standings card includes centers with 0 points', Boolean(zeroCard?.svg.includes('>999<')), zeroCard?.caption)
 
     const empty = mkDetail()
     empty.standings = []
-    ok('standings card with nothing scored builds none (text path answers)', buildStandingsCard(empty) === null)
+    ok('standings card with no centers builds none (text path answers)', buildStandingsCard(empty) === null)
 
     console.log('\n── event card caption ──')
     console.log(card?.caption)
     console.log('── standings card caption ──')
     console.log(standings?.caption)
+  }
+
+  // ═══ 11. Session console — pairing, lifecycle, identity, refresh ═══
+  section('11 · Session console (pairing, lifecycle, identity)')
+  {
+    const guest = new Client()
+    const guard = await guest.call('POST', '/api/whatsapp/session', {
+      action: 'start',
+      session: 'backup',
+      baseUrl: MOCK,
+      apiKey: MOCK_KEY,
+    })
+    ok('guest cannot drive the session console', guard.status === 401, guard)
+
+    const badAction = await admin.call('POST', '/api/whatsapp/session', { action: 'explode', session: 'default' })
+    ok('unknown action rejected', badAction.status === 400, badAction)
+
+    const noSession = await admin.call('POST', '/api/whatsapp/session', { action: 'start' })
+    ok('action without a session rejected', noSession.status === 400, noSession)
+
+    const ghost = await admin.call('POST', '/api/whatsapp/session', { action: 'qr', session: 'ghost' })
+    ok('qr for a missing session → 404', ghost.status === 404, ghost)
+
+    // A WORKING session offers no QR — that null is the panel's cue
+    // to keep waiting rather than render something stale.
+    const workingQr = await admin.call('POST', '/api/whatsapp/session', { action: 'qr', session: 'default' })
+    ok(
+      'working session reports status with no QR',
+      workingQr.status === 200 && workingQr.data.session?.status === 'WORKING' && workingQr.data.qr === null,
+      workingQr.data
+    )
+
+    // Lifecycle on a paired, stopped session: start reconnects.
+    const started = await admin.call('POST', '/api/whatsapp/session', { action: 'start', session: 'backup' })
+    ok('start brings a paired session back to WORKING', started.status === 200 && started.data.session?.status === 'WORKING', started.data)
+
+    const stopped = await admin.call('POST', '/api/whatsapp/session', { action: 'stop', session: 'backup' })
+    ok('stop takes it offline', stopped.status === 200 && stopped.data.session?.status === 'STOPPED', stopped.data)
+
+    // Logout unpairs — the next start waits for a QR scan.
+    const loggedOut = await admin.call('POST', '/api/whatsapp/session', { action: 'logout', session: 'backup' })
+    ok('logout unpaired + stopped', loggedOut.status === 200 && loggedOut.data.session?.status === 'STOPPED', loggedOut.data)
+
+    const reStart = await admin.call('POST', '/api/whatsapp/session', { action: 'start', session: 'backup' })
+    ok('start after logout waits for a QR scan', reStart.status === 200 && reStart.data.session?.status === 'SCAN_QR_CODE', reStart.data)
+
+    const pairingQr = await admin.call('POST', '/api/whatsapp/session', { action: 'qr', session: 'backup' })
+    ok(
+      'pairing session offers its QR as a data URL',
+      pairingQr.status === 200 && String(pairingQr.data.qr ?? '').startsWith('data:image/png;base64,'),
+      pairingQr.data
+    )
+
+    // "The phone scanned" — the mock completes the pairing.
+    const scan = await fetch(`${MOCK}/__mock/scan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': MOCK_KEY },
+      body: JSON.stringify({ session: 'backup' }),
+    })
+    ok('mock completes the scan', scan.status === 200, await scan.text().catch(() => ''))
+
+    const pairedQr = await admin.call('POST', '/api/whatsapp/session', { action: 'qr', session: 'backup' })
+    ok(
+      'paired session is WORKING with no QR',
+      pairedQr.status === 200 && pairedQr.data.session?.status === 'WORKING' && pairedQr.data.qr === null,
+      pairedQr.data
+    )
+
+    // A stopped session cannot have an identity.
+    await admin.call('POST', '/api/whatsapp/session', { action: 'stop', session: 'backup' })
+    const noMe = await admin.call('POST', '/api/whatsapp/verify', {
+      baseUrl: MOCK,
+      apiKey: MOCK_KEY,
+      session: 'backup',
+    })
+    ok('stopped session reports no account', noMe.status === 200 && noMe.data.me == null, noMe.data)
+
+    // Create + pair a brand-new session from the app.
+    const badName = await admin.call('POST', '/api/whatsapp/session', { action: 'create', name: 'not a name!' })
+    ok('invalid session name rejected', badName.status === 400, badName)
+
+    const created = await admin.call('POST', '/api/whatsapp/session', { action: 'create', name: 'pairme' })
+    ok(
+      'create starts the session waiting for a QR',
+      created.status === 200 && created.data.session?.status === 'SCAN_QR_CODE' && created.data.session?.name === 'pairme',
+      created.data
+    )
+
+    const duplicate = await admin.call('POST', '/api/whatsapp/session', { action: 'create', name: 'pairme' })
+    ok('duplicate name rejected (WAHA 409 → friendly 502)', duplicate.status === 502, duplicate)
+
+    await fetch(`${MOCK}/__mock/scan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': MOCK_KEY },
+      body: JSON.stringify({ session: 'pairme' }),
+    })
+
+    // Identity: verify on a WORKING session reports the account the
+    // group messages come from.
+    const withMe = await admin.call('POST', '/api/whatsapp/verify', {
+      baseUrl: MOCK,
+      apiKey: MOCK_KEY,
+      session: 'pairme',
+    })
+    ok(
+      'verify reports the connected account',
+      withMe.status === 200 && withMe.data.me?.id === '94771234567@c.us' && withMe.data.me?.pushName === 'Tourny WAHA Mock',
+      withMe.data
+    )
+
+    // Groups refresh — the re-sync probe is observable in the log.
+    const refreshed = await admin.call('POST', '/api/whatsapp/verify', {
+      baseUrl: MOCK,
+      apiKey: MOCK_KEY,
+      session: 'default',
+      refresh: true,
+    })
+    ok('refresh verify still returns groups', refreshed.status === 200 && refreshed.data.groups?.length === 3, refreshed.data)
+    const refreshEntries = readLog().filter((l) => (l as any).kind === 'refresh')
+    ok('groups refresh hit the WAHA endpoint', refreshEntries.some((e) => (e as any).session === 'default'), refreshEntries)
+
+    // Basic-auth credentials persist like the key — and clear together.
+    const saveBasic = await admin.call('PUT', '/api/whatsapp/config', {
+      username: 'mock-user',
+      password: 'mock-pass',
+    })
+    ok(
+      'username saved, password masked',
+      saveBasic.data.username === 'mock-user' && saveBasic.data.passwordSet === true && !saveBasic.data.password,
+      saveBasic.data
+    )
+    ok('api key still set (both styles live)', saveBasic.data.apiKeySet === true, saveBasic.data)
+
+    const readBasic = await admin.call('GET', '/api/whatsapp/config')
+    ok('credentials persist', readBasic.data.username === 'mock-user' && readBasic.data.passwordSet === true, readBasic.data)
+
+    const clearBasic = await admin.call('PUT', '/api/whatsapp/config', { username: '' })
+    ok(
+      'clearing the username clears the password',
+      clearBasic.data.username === '' && clearBasic.data.passwordSet === false,
+      clearBasic.data
+    )
+    ok('the api key survives the basic-auth clear', clearBasic.data.apiKeySet === true, clearBasic.data)
   }
 
   console.log('\n════════════════════════════════════════════════════════════')

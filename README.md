@@ -11,9 +11,18 @@ Run an entire event from one lightweight application:
   with a single click.
 - **Guided custom setup** — design any competition: your own scoring scheme,
   divisions, games, event counts and center roster in three steps.
-- **Field scoring console** — touch-optimised for phones and tablets.
-  Scorekeepers pick a division, a game and an event, then assign the podium
-  with three taps. Results saved while offline sync automatically.
+- **Student rankings with a registration stage** — events can be scored
+  by individual student marks instead of a picked podium: students are
+  registered with name, center and grade, receive a unique, pattern-built
+  student ID (`402-8-07`) and earn custom marks per event; each center's
+  entry is the sum of its students' marks, and the podium — plus the fixed
+  place points — is derived from those sums. A live student leaderboard
+  ranks every competitor.
+- **Field scoring on the Overview** — touch-optimised for phones and
+  tablets. The bird's-eye event matrix records everything: tap an event
+  chip, assign the podium with three taps (a center may hold several
+  places) or switch to the per-student mark sheet. Results saved while
+  offline sync automatically.
 - **Live projector scoreboard** — presented from any tournament's Overview
   as a full-screen, high-contrast dark stage with gold / silver / bronze
   rank accents and deterministic tie-breaking (total → first → second →
@@ -26,6 +35,13 @@ Run an entire event from one lightweight application:
 - **Coordination tools (M&E)** — a division × game matrix of every event,
   result corrections with mandatory justification, a complete revision
   history, center management and A4 print sheets (event progress).
+- **Undoable resets** — resetting a result keeps a full recovery
+  snapshot (podium + entire mark sheet), so an admin can undo the
+  reset — right from the toast, the history trail or the event
+  dialog — until something new is recorded on the event. Restores
+  are audit-trailed like every other change, and roster drift is
+  handled: removed students are skipped, and a student-derived
+  podium is recomputed from the marks that survived.
 - **Secure by default** — tournaments and results are public to read;
   creating, editing and scoring require a signed-in account. Every result
   records who submitted it.
@@ -36,7 +52,7 @@ Run an entire event from one lightweight application:
 | --- | --- |
 | **Guest** (no account) | View tournaments, standings, the scoreboard, the event grid and the revision history |
 | **Scorekeeper** | Record and correct results, manage event status |
-| **Administrator** | Everything: create / duplicate / delete tournaments, manage centers, reset results, settings, team accounts, WhatsApp sharing |
+| **Administrator** | Everything: create / duplicate / delete tournaments, manage centers, reset and undo-reset results, settings, team accounts, WhatsApp sharing |
 
 The first account created becomes the administrator (first-run setup);
 further accounts are added from *Team & access* — either created directly
@@ -52,16 +68,21 @@ restored with the browser's back button:
 | Path | View |
 | --- | --- |
 | `/` | Tournaments (home) |
-| `/t/{id}` | A tournament's Overview |
-| `/t/{id}/scoring` · `/t/{id}/centers` · `/t/{id}/history` · `/t/{id}/settings` | The other views |
+| `/t/{id}` | A tournament's Overview (the bird's-eye event matrix — record results from its event dialogs) |
+| `/t/{id}/centers` · `/t/{id}/students` · `/t/{id}/history` · `/t/{id}/settings` | The other views |
 | `/present/{id}` | The public guest scoreboard (no sign-in) |
 
+Legacy `/t/{id}/scoring` links (the retired field console) land on the
+Overview.
+
 - **Home** — the tournament list; every tournament opens on its Overview.
-- **Overview · Scoring · History** — the primary destinations (a glass
-  sidebar on desktop, a four-tab bar — Home, Overview, Scoring, More — on
-  phones).
-- **Centers · Settings** — occasional management work, grouped under
-  *Manage* on the sidebar and inside *More* on phones.
+- **Overview · History** — the primary destinations (a glass sidebar on
+  desktop, a three-tab bar — Home, Overview, More — on phones). The
+  Scoring console was consolidated into the Overview: the event matrix
+  is the bird's-eye view, and every event chip opens the same recording
+  dialog (podium places or student marks) the console had.
+- **Centers · Students · Settings** — occasional management work, grouped
+  under *Manage* on the sidebar and inside *More* on phones.
 - **The scoreboard is a presentation, not a place** — it never occupies a
   tab; *Present* on the Overview throws it on the projector, and closing
   it returns to your context.
@@ -69,12 +90,36 @@ restored with the browser's back button:
 ### Guest scoreboard (`/present/{id}`)
 
 A standalone, public live scoreboard for the people watching from the
-outside: no sign-in, no app chrome — open the link and watch. Standings
+outside: no sign-in, no app chrome — open the link and watch. It runs
+on the same liquid-glass theme as the app itself (aurora and starfield
+night sky, frosted glass panels, the steel-blue accent; gold stays
+reserved for podium moments), so the guest page and the staff app read
+as one product. Standings
 arrive over the same Server-Sent Events stream the staff app uses and
 reorder live; on phones the leaderboard becomes stacked result cards,
-and the latest recorded podium shows as a *Latest result* strip. Grab the
+and the latest recorded podium shows as a *Latest result* strip. When
+the tournament tracks students, guests get the same two acts the
+projector shows: a **Centers / Students** switch flips the page between
+the standings table and the student ranking stage. Grab the
 link with **Guest link** on the Overview (or from *Settings → WhatsApp
 sharing*).
+
+### Events — the matrix is editable
+
+The event matrix was the plan, not a cage: **Add** (next to *Events* on
+the Overview, administrators) appends slots to a live tournament —
+under an existing category and game, or under **brand-new ones created
+right in the dialog** (the game the plan missed, the extra round the
+field asks for). Each batch of slots picks its scoring mode up front
+(center podium or per-student marks) and numbers itself after whatever
+already exists (e.g. *slots 3–4*).
+
+From any event's dialog, administrators can also **rename the slot**,
+**switch its scoring mode** (only while it is clean — a recorded result
+or mark sheet locks the mode until it is reset) and **remove the slot**
+entirely; removal cascades its result, marks and audit trail, and the
+standings and progress recompute immediately. Status changes remain
+open to every signed-in staff member.
 
 ### Centers
 
@@ -83,6 +128,63 @@ The roster is fully editable: add centers in bulk (code + optional name),
 remove centers (with a confirmation that spells out what the standings
 lose). Edits flow everywhere immediately — standings, podium pickers and
 shared cards.
+
+### Students: registration stage & student rankings
+
+Some events arrive as **mark sheets** — per-student marks — rather than a
+picked center podium. Any event can be scored either way; the event
+dialog shows both tabs (*Center podium* / *Student marks*).
+
+- **Registration stage** — students are registered (any signed-in staff
+  member can, straight from the field) with their **name, center and
+  grade**, and the system issues each one a unique **student ID**
+  composed from the tournament's ID pattern — e.g. `402-8-07` (center
+  402, grade 8, roll 07). That ID is the field reference everywhere:
+  mark sheets list students as `402-8-07 · Kasun Perera`, so two
+  students who share a name can never be confused. IDs are issued once
+  and never change — correcting a student's center or grade never
+  renumbers anyone.
+- **Customizable ID pattern** — *Settings → Student IDs* composes the
+  pattern from `{center}`, `{grade}`, `{index}` (roll number, zero-
+  padded; width via `{index3}`), `{initials}` and `{year}` tokens, with
+  a live preview. The roll number scopes to the tokens beside it —
+  `{center}-{grade}-{index}` numbers each center-and-grade class
+  separately. Students registered before IDs existed get theirs with
+  one click (*Generate missing IDs*).
+- **Custom marks** — the mark sheet gives each scored student their own
+  marks (any non-negative number, decimals included), with as many or as
+  few students per center as the event needs — the count can vary by
+  event and by center.
+- **Derived podium** — each center's event entry is the sum of its
+  students' marks; centers are ranked by that sum against the other
+  centers, and the top three earn the event's podium places, paying the
+  usual fixed points (75/50/25 by default). The preview updates live as
+  you type. Ties on sums break by center code. A center may also hold
+  several places in one manually-picked podium — a dominant center can
+  sweep 1st and 2nd, and the standings pay both places.
+- **Student ranking** — the Students view ranks every competitor by total
+  marks (tie-break: events contested, then best single mark), live. The
+  same ranking is a **presentation act**: the in-app scoreboard
+  (*Present*) and the public guest scoreboard both offer a Centers /
+  Students switch, and the student view is an awards stage — bronze,
+  silver and champion cards rise onto a spotlighted podium (stacked
+  1st → 2nd → 3rd on phones), with the rest of the field gliding into
+  place live as marks land. A **Print** button (Students view, and the
+  scoreboard's student mode) produces an A4 *Student Ranking Sheet* —
+  every student with rank, issued ID, center, events, best mark and
+  total.
+- **Same guardrails** — correcting a mark sheet requires a justification
+  and lands in the audit trail; reassigning or removing a student with
+  recorded marks re-derives every affected event automatically; resetting
+  a student-scored event clears its mark sheet too.
+- **Offline field entry** — mark sheets queue on the device and sync
+  automatically, exactly like podium results.
+
+This feature ships on the `feature/student-rankings` branch. On the VM it
+runs as the **dev slot** of the two-slot deployment — its own worktree,
+container, port (`127.0.0.1:8091`), database and session cookie — so the
+stable container is never disturbed (see
+[deploy/README.md](deploy/README.md)).
 
 ### Invitation codes
 
@@ -108,24 +210,44 @@ Share results to a WhatsApp group through a self-hosted
 [WAHA](https://waha.devlike.pro) server (WhatsApp HTTP API):
 
 1. In *Settings → WhatsApp sharing*, enter the WAHA server address and
-   its API key, then *Connect* — the app verifies the connection and
-   lists the WhatsApp sessions on that server.
+   its credentials — the API key, a username + password (basic auth,
+   for `LOGIN_PASSWORD` servers or a server behind a login gateway),
+   or both — then *Connect*: the app verifies the connection and lists
+   the WhatsApp sessions on that server.
 2. Pick the connected session and the destination group, and *Save the
-   connection*. The API key is stored app-side and never returned to the
-   browser; a *Send test message* probe confirms the wiring end to end.
+   connection*. Credentials are stored app-side and never returned to
+   the browser; a *Send test message* probe confirms the wiring end to
+   end. The status line also shows which WhatsApp account is
+   broadcasting (number + profile name), so you always know whose
+   phone the group hears from.
 3. Share from anywhere: *Share* on the Overview sends the overall
    standings; *Share* inside any recorded event sends that podium
    (medals, centers and points).
+
+The card doubles as the **session console** — a dropped connection is
+repaired without opening the WAHA dashboard. When a session needs
+pairing (status *Needs QR scan*), the pairing panel opens itself and
+polls until the phone scans (*WhatsApp → Settings → Linked devices →
+Link a device*). *Start* / *Restart* / *Stop* bring a session online or
+offline (pairing survives a stop), *Log out* unpairs the device, and
+*+ New WhatsApp session* creates and starts a session ready for its
+first scan. A *Refresh* control next to the group picker re-syncs the
+group list after the account joins a new group.
 
 Broadcasts go out as **styled share cards** — rendered images in the
 app's own "liquid glass" design language (deep blue-charcoal night sky
 with a starfield constellation, frosted glass panels with lit top
 edges, medal coins, progress bar), typeset with real font shaping so
 the Sinhala game names render correctly, sent as JPEG with a short
-caption via WAHA's `sendImage`. The card design is verified
+caption via WAHA's `sendImage`. Each broadcast type has its own
+silhouette, so the group tells them apart at thumbnail size: an
+**event result** is a *podium* — 2nd · 1st · 3rd columns standing on
+gold/silver/bronze pedestals under a crown — while the **standings**
+are a *classification table* — one glass panel, hairline rows, G/S/B
+count columns and the total. The card design is verified
 pixel-by-pixel: `scripts/render-sample-cards.ts` renders every variant
 and `scripts/check-card-layout.py` asserts the geometry, palette and
-ink placement (129 checks). If a card cannot be rendered or delivered
+ink placement (143 checks). If a card cannot be rendered or delivered
 (missing fonts, an engine without `sendImage`, a flaky server), the
 equivalent plain-text announcement is sent instead, so the group
 always hears the result.
@@ -152,8 +274,9 @@ group. Both WAHA engine families work — the JS cores and the Go core
 (`gows`, e.g. the `devlikeapro/waha:gows-arm` image), whose group
 lists use Go-style field names. Headless deployments can
 pre-configure the connection with `WAHA_BASE_URL`, `WAHA_API_KEY`,
-`WAHA_SESSION`, `WAHA_GROUP_CHAT_ID` and `WAHA_AUTO_EVENTS` instead of
-the Settings UI.
+`WAHA_USERNAME` + `WAHA_PASSWORD` (basic auth), `WAHA_SESSION`,
+`WAHA_GROUP_CHAT_ID` and `WAHA_AUTO_EVENTS` instead of the Settings
+UI.
 
 **Card fonts (local development only):** the cards are typeset with
 Poppins + Noto Sans Sinhala, which live in `public/fonts/`. The
@@ -189,6 +312,8 @@ With the dev server running:
 
 ```bash
 bun run scripts/battle-test.ts          # core suite (a few assertions are state-dependent)
+bun run scripts/student-test.ts         # student rankings suite (roster, mark sheets, derivation)
+bun run scripts/event-edit-probe.ts     # event slot editing suite (add/rename/re-score/remove)
 bun run scripts/waha-mock.ts 3001 &     # mock WAHA server
 BASE_URL=http://localhost:3000 bun run scripts/whatsapp-test.ts
 ```
@@ -201,6 +326,33 @@ the audit trail, center management — bulk add, **editing (code, name,
 location, duplicate-code conflicts)** and removal — the URL routes
 (including the public present page and 404 fall-through), the live
 event stream, concurrent submissions and account management.
+
+The student suite (63 assertions) covers the experimental rankings:
+roster management and role enforcement (staff add, admin edit/move/remove,
+same-name students with distinct internal ids), mark sheet guardrails
+(empty/negative/duplicate-student rejections), the derived center podium
+and fixed place points from per-center sums, the student leaderboard and
+its ordering, corrections with mandatory justification (audit-trailed),
+the manual-podium lockout on student events, automatic re-derivation
+after reassignment and removal, reset (clearing the mark sheet) and a
+classic-podium regression pass.
+
+The event-edit suite (36 assertions) covers the editable matrix:
+appending slots to an existing category/game pair (numbering, scoring
+mode, judge lockout), inline creation of a brand-new category and game
+(duplicate-code rejection), renaming slots (admin-only), the scoring
+mode lock while a result or mark sheet exists, judge access to status
+changes, student standings and the derived podium, and slot removal
+(cascade + progress recompute).
+
+The undo-reset suite (47 assertions) covers the recovery flow: podium
+reset → undo (byte-exact restore of places, notes and status), mark
+sheet reset → undo (all marks plus the derived podium back), the audit
+feed's undoability flags, role enforcement (judges can neither reset
+nor undo), stale-snapshot refusal once newer data is recorded, the
+single-use snapshot (second undo refused), and roster drift between
+reset and undo (removed students skipped, derived podium recomputed
+from the surviving marks).
 
 The WhatsApp suite (100 assertions) covers access control on every
 endpoint, config save/masking, session + group discovery, all three
@@ -216,13 +368,13 @@ the bundled WAHA mock, so no real group is messaged while testing.
 
 ## Deployment
 
-Single Docker container with an embedded database, tuned for small VMs
-(~80–150 MB RAM, hard 512 MB cap), exposed through Cloudflare Tunnel or
-any reverse proxy:
+Self-contained Docker containers with an embedded database, tuned for small
+VMs (~80–150 MB RAM per slot, hard 512 MB cap). One repo folder runs TWO
+slots — a stable release and a dev build, each from its own branch:
 
 ```bash
-export AUTH_SECRET="$(openssl rand -hex 32)"
-docker compose -f deploy/docker-compose.yml up -d --build
+./deploy/deploy.sh setup            # first time: worktrees, secrets, build, start
+./deploy/deploy.sh update stable    # rebuild one slot from its branch
 ```
 
 See [deploy/README.md](deploy/README.md) for the full runbook.
@@ -245,3 +397,5 @@ scripts/                 Battle test suite + demo seeder
 | `DATABASE_URL` | SQLite file path, e.g. `file:./db/custom.db` |
 | `AUTH_SECRET` | Secret used to sign session cookies — use a long random value in production |
 | `PUBLIC_BASE_URL` | Optional: public address used for guest links in shared messages (defaults to the request's host) |
+| `SESSION_COOKIE_NAME` | Optional: session cookie name — the dev slot of the two-slot deployment sets `tourny_session_dev` so `:8090` and `:8091` never fight over the browser cookie (cookies are scoped by domain, not port) |
+| `APP_VARIANT` | Optional: set to `experimental` to badge the UI with an amber "Exp" chip (used by the dev slot in `deploy/docker-compose.yml`) |

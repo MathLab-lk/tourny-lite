@@ -36,9 +36,15 @@ export async function POST(req: NextRequest) {
     }
 
     const cfg = await getWhatsAppConfig()
-    if (!cfg || !cfg.baseUrl || !cfg.apiKey || !cfg.groupChatId) {
+    if (!cfg || !cfg.baseUrl || !cfg.groupChatId) {
       return NextResponse.json(
         { error: 'WhatsApp sharing is not set up yet — open Settings to connect it first.' },
+        { status: 400 }
+      )
+    }
+    if (!cfg.apiKey && !cfg.username && !cfg.password) {
+      return NextResponse.json(
+        { error: 'The WhatsApp server needs credentials — open Settings and save them.' },
         { status: 400 }
       )
     }
