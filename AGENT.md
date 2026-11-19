@@ -69,7 +69,12 @@ bun run scripts/student-test.ts            # 87 assertions — student flow
 bun run scripts/event-edit-probe.ts        # event slot editing
 bun run scripts/undo-reset-test.ts         # 47 assertions — reset/undo
 bun run scripts/waha-mock.ts 3001 &        # mock WAHA server
-BASE_URL=http://localhost:3000 bun run scripts/whatsapp-test.ts   # 121
+BASE_URL=http://localhost:3100 bun run scripts/whatsapp-test.ts   # 152
+                                            # (self-resetting: clears the
+                                            #  saved config + mock sessions
+                                            #  at the start of every run;
+                                            #  the mock accepts X-Api-Key
+                                            #  OR basic auth mock-user/mock-pass)
 # Share-card design: render + verify pixel-by-pixel (needs the
 # canonical seed data — see the header of check-card-layout.py)
 XDG_DATA_HOME=<fonts-dir> bun scripts/render-sample-cards.ts
@@ -110,6 +115,20 @@ columns (steel blue). Never make them both lists again; that was the
 whole point. When you change the card geometry, re-run
 render-sample-cards + check-card-layout and recalibrate the checker's
 positions to match (they are documented in its header).
+
+**WhatsApp connection** (`src/lib/whatsapp.ts`): WAHA auth is
+TWO styles at once — `X-Api-Key` and/or HTTP basic auth
+(username + password, WAHA's LOGIN_PASSWORD mode / login-gated
+servers); `resolveWahaCredentials` merges typed fields with the
+stored config for every Settings request. The Settings card is also
+the session console: QR pairing (polled `/{session}/auth/qr`),
+start/stop/restart/logout, create, `/{session}/me` identity and
+groups refresh — a dropped connection is repaired without the WAHA
+dashboard. The stored apiKey can be cleared via
+`PUT /api/whatsapp/config {clearApiKey: true}` (blank apiKey KEEPS
+the stored one; blank username + no password clears the basic pair).
+`/api/whatsapp/session` is the console's action endpoint
+(start|stop|restart|logout|create|qr).
 
 ## Deployment — two slots from one repo folder (deploy/)
 

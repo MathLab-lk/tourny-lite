@@ -210,14 +210,29 @@ Share results to a WhatsApp group through a self-hosted
 [WAHA](https://waha.devlike.pro) server (WhatsApp HTTP API):
 
 1. In *Settings → WhatsApp sharing*, enter the WAHA server address and
-   its API key, then *Connect* — the app verifies the connection and
-   lists the WhatsApp sessions on that server.
+   its credentials — the API key, a username + password (basic auth,
+   for `LOGIN_PASSWORD` servers or a server behind a login gateway),
+   or both — then *Connect*: the app verifies the connection and lists
+   the WhatsApp sessions on that server.
 2. Pick the connected session and the destination group, and *Save the
-   connection*. The API key is stored app-side and never returned to the
-   browser; a *Send test message* probe confirms the wiring end to end.
+   connection*. Credentials are stored app-side and never returned to
+   the browser; a *Send test message* probe confirms the wiring end to
+   end. The status line also shows which WhatsApp account is
+   broadcasting (number + profile name), so you always know whose
+   phone the group hears from.
 3. Share from anywhere: *Share* on the Overview sends the overall
    standings; *Share* inside any recorded event sends that podium
    (medals, centers and points).
+
+The card doubles as the **session console** — a dropped connection is
+repaired without opening the WAHA dashboard. When a session needs
+pairing (status *Needs QR scan*), the pairing panel opens itself and
+polls until the phone scans (*WhatsApp → Settings → Linked devices →
+Link a device*). *Start* / *Restart* / *Stop* bring a session online or
+offline (pairing survives a stop), *Log out* unpairs the device, and
+*+ New WhatsApp session* creates and starts a session ready for its
+first scan. A *Refresh* control next to the group picker re-syncs the
+group list after the account joins a new group.
 
 Broadcasts go out as **styled share cards** — rendered images in the
 app's own "liquid glass" design language (deep blue-charcoal night sky
@@ -259,8 +274,9 @@ group. Both WAHA engine families work — the JS cores and the Go core
 (`gows`, e.g. the `devlikeapro/waha:gows-arm` image), whose group
 lists use Go-style field names. Headless deployments can
 pre-configure the connection with `WAHA_BASE_URL`, `WAHA_API_KEY`,
-`WAHA_SESSION`, `WAHA_GROUP_CHAT_ID` and `WAHA_AUTO_EVENTS` instead of
-the Settings UI.
+`WAHA_USERNAME` + `WAHA_PASSWORD` (basic auth), `WAHA_SESSION`,
+`WAHA_GROUP_CHAT_ID` and `WAHA_AUTO_EVENTS` instead of the Settings
+UI.
 
 **Card fonts (local development only):** the cards are typeset with
 Poppins + Noto Sans Sinhala, which live in `public/fonts/`. The
