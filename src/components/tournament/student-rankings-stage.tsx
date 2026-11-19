@@ -15,8 +15,8 @@ export type RankingsMode = 'centers' | 'students'
 /**
  * The Centers ↔ Students switch for the live boards. A glass pill
  * with a lit active segment — the same visual language as the app's
- * floating navigation, so the mode change reads as a destination
- * change, not a filter.
+ * floating navigation (steel-blue primary on glass), so the mode
+ * change reads as a destination change, not a filter.
  */
 export function RankingsModeToggle({
   mode,
@@ -30,14 +30,14 @@ export function RankingsModeToggle({
   const seg = (active: boolean) =>
     cn(
       'flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold tracking-wide transition-colors sm:text-sm',
-      active ? 'bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/50' : 'text-zinc-400 hover:text-zinc-200'
+      active ? 'bg-primary/15 text-primary ring-1 ring-primary/50' : 'text-muted-foreground hover:text-foreground'
     )
   return (
     <div
       role="tablist"
       aria-label="Rankings"
       className={cn(
-        'inline-flex items-center gap-1 rounded-full border border-white/10 bg-zinc-900/70 p-1 backdrop-blur',
+        'inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.06] p-1 backdrop-blur',
         className
       )}
     >
@@ -85,9 +85,9 @@ export function StudentRankingsStage({ rows, className }: { rows: StudentStandin
   // apart. Legacy students without a code fall back to the short
   // internal id.
   const name = (row: StudentStandingRow) => (
-    <span className="block truncate font-semibold text-white">
+    <span className="block truncate font-semibold text-foreground">
       {row.name}
-      <span className="ml-1.5 rounded bg-white/10 px-1 py-0.5 text-[10px] font-medium tabular-nums text-zinc-400">
+      <span className="ml-1.5 rounded bg-white/10 px-1 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
         {row.studentCode ?? studentShortId(row.studentId)}
       </span>
     </span>
@@ -105,9 +105,9 @@ export function StudentRankingsStage({ rows, className }: { rows: StudentStandin
 
   if (rows.length === 0) {
     return (
-      <div className={cn('rounded-2xl border border-white/10 bg-zinc-900/60 px-6 py-16 text-center shadow-2xl shadow-black/60 backdrop-blur', className)}>
-        <GraduationCap className="mx-auto h-9 w-9 text-zinc-600" aria-hidden />
-        <p className="mt-4 text-sm text-zinc-400">
+      <div className={cn('rounded-2xl border border-white/10 bg-card px-6 py-16 text-center shadow-2xl shadow-black/40 backdrop-blur', className)}>
+        <GraduationCap className="mx-auto h-9 w-9 text-foreground/30" aria-hidden />
+        <p className="mt-4 text-sm text-muted-foreground">
           Students appear here as soon as they are added and scored.
         </p>
       </div>
@@ -140,7 +140,7 @@ export function StudentRankingsStage({ rows, className }: { rows: StudentStandin
                   transition={{ duration: 0.85, ease: EASE, delay }}
                   style={{ transformOrigin: 'bottom center' }}
                   className={cn(
-                    'relative rounded-2xl border bg-zinc-900/70 p-4 text-center shadow-2xl shadow-black/60 backdrop-blur sm:p-5',
+                    'relative rounded-2xl border bg-card p-4 text-center shadow-2xl shadow-black/40 backdrop-blur sm:p-5',
                     champ
                       ? 'border-amber-400/40 bg-gradient-to-b from-amber-400/[0.12] to-transparent pb-6 sm:min-h-[15rem] sm:pb-7'
                       : 'border-white/10 sm:min-h-[12.5rem]'
@@ -158,11 +158,11 @@ export function StudentRankingsStage({ rows, className }: { rows: StudentStandin
                   <div className="mt-3 min-w-0 px-1">
                     {name(row)}
                     {row.centerCode ? (
-                      <span className="mt-1 inline-block rounded-full border border-white/15 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-zinc-300">
+                      <span className="mt-1 inline-block rounded-full border border-white/15 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">
                         {row.centerCode}
                       </span>
                     ) : (
-                      <span className="mt-1 block text-[11px] text-zinc-500">no center yet</span>
+                      <span className="mt-1 block text-[11px] text-muted-foreground/70">no center yet</span>
                     )}
                     {champ ? (
                       <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-amber-300/90">
@@ -173,13 +173,13 @@ export function StudentRankingsStage({ rows, className }: { rows: StudentStandin
                   <div className="mt-3">
                     <span
                       className={cn(
-                        'block font-semibold text-white tabular-nums drop-shadow-[0_2px_12px_rgba(255,255,255,0.15)]',
+                        'block font-semibold text-foreground tabular-nums drop-shadow-[0_2px_12px_rgba(255,255,255,0.15)]',
                         champ ? 'text-4xl sm:text-5xl' : 'text-3xl sm:text-4xl'
                       )}
                     >
                       <AnimatedNumber value={row.total} />
                     </span>
-                    <span className="mt-0.5 block text-[10px] uppercase tracking-wider text-zinc-500">
+                    <span className="mt-0.5 block text-[10px] uppercase tracking-wider text-muted-foreground/60">
                       marks · {row.events} event{row.events === 1 ? '' : 's'}
                     </span>
                   </div>
@@ -199,7 +199,7 @@ export function StudentRankingsStage({ rows, className }: { rows: StudentStandin
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.55, ease: EASE, delay: 0.15 + i * 0.14 }}
                   className={cn(
-                    'flex items-center gap-3.5 rounded-2xl border bg-zinc-900/70 p-4 shadow-2xl shadow-black/60 backdrop-blur',
+                    'flex items-center gap-3.5 rounded-2xl border bg-card p-4 shadow-2xl shadow-black/40 backdrop-blur',
                     champ
                       ? 'border-amber-400/40 bg-gradient-to-r from-amber-400/[0.1] to-transparent'
                       : 'border-white/10'
@@ -208,15 +208,15 @@ export function StudentRankingsStage({ rows, className }: { rows: StudentStandin
                   <RankCoin rank={rank} large={champ} />
                   <span className="min-w-0 flex-1">
                     {name(row)}
-                    <span className="mt-0.5 block text-[11px] font-semibold tabular-nums text-zinc-400">
+                    <span className="mt-0.5 block text-[11px] font-semibold tabular-nums text-muted-foreground">
                       {row.centerCode ?? 'no center yet'} · {row.events} event{row.events === 1 ? '' : 's'}
                     </span>
                   </span>
                   <span className="shrink-0 text-right">
-                    <span className={cn('block font-semibold text-white tabular-nums', champ ? 'text-3xl' : 'text-2xl')}>
+                    <span className={cn('block font-semibold text-foreground tabular-nums', champ ? 'text-3xl' : 'text-2xl')}>
                       <AnimatedNumber value={row.total} />
                     </span>
-                    <span className="block text-[10px] uppercase tracking-wider text-zinc-500">marks</span>
+                    <span className="block text-[10px] uppercase tracking-wider text-muted-foreground/60">marks</span>
                   </span>
                 </motion.div>
               )
@@ -232,9 +232,9 @@ export function StudentRankingsStage({ rows, className }: { rows: StudentStandin
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: EASE, delay: podium.length > 0 ? 0.75 : 0.15 }}
           style={{ transformOrigin: 'top center' }}
-          className="mt-5 overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/60 shadow-2xl shadow-black/60 backdrop-blur"
+          className="mt-5 overflow-hidden rounded-2xl border border-white/10 bg-card shadow-2xl shadow-black/40 backdrop-blur"
         >
-          <div className="border-b border-white/10 bg-zinc-900/90 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.3em] text-zinc-500 sm:px-6">
+          <div className="border-b border-white/10 bg-secondary/50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.3em] text-muted-foreground sm:px-6">
             {podium.length > 0 ? 'The field' : 'Student ranking'}
           </div>
           <ol className="divide-y divide-white/5">
@@ -249,14 +249,14 @@ export function StudentRankingsStage({ rows, className }: { rows: StudentStandin
                   ease: EASE,
                   layout: { type: 'spring', stiffness: 300, damping: 32 },
                 }}
-                className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-zinc-800/40 sm:px-6"
+                className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-white/[0.04] sm:px-6"
               >
-                <span className="w-8 shrink-0 text-center text-base font-semibold tabular-nums text-zinc-400">
+                <span className="w-8 shrink-0 text-center text-base font-semibold tabular-nums text-muted-foreground">
                   {row.rank}
                 </span>
                 <span className="min-w-0 flex-1">
                   {name(row)}
-                  <span className="mt-0.5 block text-[11px] font-medium tabular-nums text-zinc-500">
+                  <span className="mt-0.5 block text-[11px] font-medium tabular-nums text-muted-foreground/70">
                     {row.centerCode ?? 'no center yet'}
                     {row.events > 0 ? (
                       <>
@@ -270,11 +270,11 @@ export function StudentRankingsStage({ rows, className }: { rows: StudentStandin
                   </span>
                 </span>
                 <span className="shrink-0 text-right">
-                  <span className={cn('block font-semibold tabular-nums', row.events > 0 ? 'text-2xl text-white' : 'text-xl text-zinc-600')}>
+                  <span className={cn('block font-semibold tabular-nums', row.events > 0 ? 'text-2xl text-foreground' : 'text-xl text-foreground/25')}>
                     {row.events > 0 ? <AnimatedNumber value={row.total} /> : '—'}
                   </span>
                   {row.events > 0 ? (
-                    <span className="block text-[10px] uppercase tracking-wider text-zinc-500">marks</span>
+                    <span className="block text-[10px] uppercase tracking-wider text-muted-foreground/60">marks</span>
                   ) : null}
                 </span>
               </motion.li>
@@ -284,7 +284,7 @@ export function StudentRankingsStage({ rows, className }: { rows: StudentStandin
       ) : null}
 
       {/* Footer meta */}
-      <p className="mt-4 flex flex-wrap items-center justify-center gap-3 text-[11px] text-zinc-500">
+      <p className="mt-4 flex flex-wrap items-center justify-center gap-3 text-[11px] text-muted-foreground/70">
         <span className="flex items-center gap-1.5">
           <Award className="h-3.5 w-3.5" aria-hidden />
           Ties on totals break by events, then best single mark

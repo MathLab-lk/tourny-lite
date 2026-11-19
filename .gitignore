@@ -40,3 +40,8 @@ deploy/data-dev/
 deploy/data-experimental/
 deploy/backups/
 deploy/deploy.local.env
+
+# local scratch — visual verification, demo data scripts, fonts
+
+# local scratch — visual verification, demo data scripts, fonts
+.scratch/

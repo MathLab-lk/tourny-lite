@@ -64,12 +64,16 @@ bun run build                   # next build + prepare-standalone.mjs
 
 ```bash
 bun run scripts/seed.ts                    # reset + seed demo data
-bun run scripts/battle-test.ts             # 149 assertions — core suite
-bun run scripts/student-test.ts            # 63 assertions — student flow
+bun run scripts/battle-test.ts             # 150 assertions — core suite
+bun run scripts/student-test.ts            # 87 assertions — student flow
 bun run scripts/event-edit-probe.ts        # event slot editing
 bun run scripts/undo-reset-test.ts         # 47 assertions — reset/undo
 bun run scripts/waha-mock.ts 3001 &        # mock WAHA server
-BASE_URL=http://localhost:3000 bun run scripts/whatsapp-test.ts
+BASE_URL=http://localhost:3000 bun run scripts/whatsapp-test.ts   # 121
+# Share-card design: render + verify pixel-by-pixel (needs the
+# canonical seed data — see the header of check-card-layout.py)
+XDG_DATA_HOME=<fonts-dir> bun scripts/render-sample-cards.ts
+python3 scripts/check-card-layout.py       # 143 layout assertions
 ```
 
 Seeded admin: `admin@tourny.test` / `correct horse battery`.
@@ -86,6 +90,26 @@ Motion vocabulary is shared via `ui-bits.tsx` — nothing snaps; reuse its
 spring tokens and stagger variants instead of inventing new ones.
 The Overview view is the coordination console (bird's-eye event grid +
 mark entry); there is intentionally no separate scorer page.
+
+**Theme system:** one "liquid glass" language everywhere — the app
+shell, the projector scoreboard AND the public pages
+(`/present/[id]`, `/present/[id]/event/[eventId]`) all run on the
+globals.css tokens (`bg-background`, `bg-card`, `text-primary`,
+`text-muted-foreground` + the aurora/stars/vignette/noise layers).
+The present pages force a `.dark` scope wrapper; keep them on the
+tokens, never on raw zinc/amber classes. Gold/silver/bronze appear
+ONLY where podium semantics require them (medal coins, 1st/2nd/3rd
+counts, champion frames); everything structural is steel blue.
+`student-rankings-stage.tsx` is shared by the projector modal and the
+guest scoreboard — changes propagate to both by design.
+
+**WhatsApp share cards** (`src/lib/share-card.ts`): each broadcast
+type owns a distinct silhouette — event = the 2nd·1st·3rd podium on
+pedestals (gold), standings = the classification table with G/S/B
+columns (steel blue). Never make them both lists again; that was the
+whole point. When you change the card geometry, re-run
+render-sample-cards + check-card-layout and recalibrate the checker's
+positions to match (they are documented in its header).
 
 ## Deployment — two slots from one repo folder (deploy/)
 

@@ -90,7 +90,11 @@ Overview.
 ### Guest scoreboard (`/present/{id}`)
 
 A standalone, public live scoreboard for the people watching from the
-outside: no sign-in, no app chrome — open the link and watch. Standings
+outside: no sign-in, no app chrome — open the link and watch. It runs
+on the same liquid-glass theme as the app itself (aurora and starfield
+night sky, frosted glass panels, the steel-blue accent; gold stays
+reserved for podium moments), so the guest page and the staff app read
+as one product. Standings
 arrive over the same Server-Sent Events stream the staff app uses and
 reorder live; on phones the leaderboard becomes stacked result cards,
 and the latest recorded podium shows as a *Latest result* strip. When
@@ -220,10 +224,15 @@ app's own "liquid glass" design language (deep blue-charcoal night sky
 with a starfield constellation, frosted glass panels with lit top
 edges, medal coins, progress bar), typeset with real font shaping so
 the Sinhala game names render correctly, sent as JPEG with a short
-caption via WAHA's `sendImage`. The card design is verified
+caption via WAHA's `sendImage`. Each broadcast type has its own
+silhouette, so the group tells them apart at thumbnail size: an
+**event result** is a *podium* — 2nd · 1st · 3rd columns standing on
+gold/silver/bronze pedestals under a crown — while the **standings**
+are a *classification table* — one glass panel, hairline rows, G/S/B
+count columns and the total. The card design is verified
 pixel-by-pixel: `scripts/render-sample-cards.ts` renders every variant
 and `scripts/check-card-layout.py` asserts the geometry, palette and
-ink placement (129 checks). If a card cannot be rendered or delivered
+ink placement (143 checks). If a card cannot be rendered or delivered
 (missing fonts, an engine without `sendImage`, a flaky server), the
 equivalent plain-text announcement is sent instead, so the group
 always hears the result.

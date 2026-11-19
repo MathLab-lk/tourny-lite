@@ -840,14 +840,20 @@ async function main() {
       Boolean(standings?.svg.includes('Kaduwela Center') && standings.svg.includes('>105<') && standings.svg.includes('TOURNY LITE')),
       standings?.caption
     )
+    // The two cards speak with different accents: the event card's
+    // first accent ink is gold (its eyebrow and podium), the standings
+    // card's is steel blue (its eyebrow) — any gold in the standings
+    // comes later, from the medal-count numerals.
+    const firstAccent = (svg: string) => {
+      const gold = svg.indexOf('fill="#E9C64A"')
+      const blue = svg.indexOf('fill="#6FAEE8"')
+      if (gold === -1) return 'blue'
+      if (blue === -1) return 'gold'
+      return gold < blue ? 'gold' : 'blue'
+    }
     ok(
       'event and standings cards are visually distinct (gold event accent vs blue standings accent)',
-      Boolean(
-        card?.svg.includes('fill="#E9C64A"') &&
-          !standings?.svg.includes('fill="#E9C64A"') &&
-          standings.svg.includes('fill="#6FAEE8"') &&
-          !card.svg.includes('fill="#6FAEE8"')
-      ),
+      Boolean(card && standings && firstAccent(card.svg) === 'gold' && firstAccent(standings.svg) === 'blue'),
       'accent check'
     )
     ok(
@@ -866,7 +872,7 @@ async function main() {
     ok('event champion row is emphasized (taller, gold rim)', Boolean(card?.svg.includes('stroke="#D9B44A"')), 'champion rim')
     ok(
       'standings leader carries the gold tab',
-      Boolean(standings?.svg.includes('width="5" height="60" rx="2.5" fill="url(#gGold)"')),
+      Boolean(standings?.svg.includes('width="5" height="56" rx="2.5" fill="url(#gGold)"')),
       'leader tab'
     )
     ok('standings eyebrow reads OVERALL STANDINGS', Boolean(standings?.svg.includes('OVERALL STANDINGS')), 'eyebrow')
